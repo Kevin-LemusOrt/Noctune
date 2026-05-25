@@ -80,10 +80,14 @@ while True:
 
         time.sleep(0.03)
 
+    except KeyboardInterrupt:
+
+        os.system("tmux kill-session -t spotyterminal")
+
+        break
+    
     except Exception as e:
-
-        os.system("clear")
-
+        
         print("Esperando Spotify...")
 
         time.sleep(2)

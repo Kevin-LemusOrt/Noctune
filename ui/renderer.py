@@ -11,17 +11,21 @@ def render_current_lyric(
 
     os.system("clear")
 
-    terminal_height = shutil.get_terminal_size().lines
+    terminal_size = shutil.get_terminal_size()
 
-    lyrics_height = terminal_height // 2
+    terminal_width = terminal_size.columns
 
-    print(f"Now Playing: {song_data}")
+    terminal_height = terminal_size.lines
 
-    print("-" * 50)
+    print(f"Now Playing: {song_data}".center(terminal_width))
 
-    empty_lines = lyrics_height // 2
+    print("-" * terminal_width)
 
-    for _ in range(empty_lines):
+    available_height = terminal_height - 6
+
+    top_padding = available_height // 3
+
+    for _ in range(top_padding):
 
         print()
 
@@ -31,40 +35,58 @@ def render_current_lyric(
 
         waiting_text = "No lyrics found" + ("." * dots)
 
-        print(waiting_text.center(80))
+        print(waiting_text.center(terminal_width))
 
     else:
 
-        if current_index >= len(parsed_lyrics):
+        start_index = max(0, current_index - 2)
 
-            current_index = len(parsed_lyrics) - 1
+        end_index = min(len(parsed_lyrics), current_index + 1)
 
-        current_timestamp, current_lyric = parsed_lyrics[current_index]
+        visible_lyrics = parsed_lyrics[start_index:end_index]
 
-        elapsed = current_time - current_timestamp
+        for index, (timestamp, lyric) in enumerate(visible_lyrics):
 
-        if elapsed < 0:
+            real_index = start_index + index
 
-            elapsed = 0
+            if real_index == current_index:
 
-        characters_per_second = 25
+                elapsed = current_time - timestamp
 
-        visible_characters = int(elapsed * characters_per_second)
+                if elapsed < 0:
 
-        if visible_characters > len(current_lyric):
+                    elapsed = 0
 
-            visible_characters = len(current_lyric)
+                if current_index + 1 < len(parsed_lyrics):
 
-        animated_lyric = current_lyric[:visible_characters]
+                    next_timestamp = parsed_lyrics[current_index + 1][0]
 
-        print(animated_lyric.center(80))
+                else:
 
-    remaining_lines = lyrics_height - empty_lines
+                    next_timestamp = timestamp + 5
 
-    for _ in range(remaining_lines):
+                line_duration = next_timestamp - timestamp
 
-        print()
+                if line_duration <= 0:
 
-    print("-" * 50)
+                    line_duration = 1
 
-    print("CAVA GOES HERE")
+                characters_per_second = (
+                    len(lyric) / line_duration
+                ) * 0.85
+
+                visible_characters = int(
+                    elapsed * characters_per_second
+                )
+
+                if visible_characters > len(lyric):
+
+                    visible_characters = len(lyric)
+
+                animated_lyric = lyric[:visible_characters]
+
+                print(animated_lyric.center(terminal_width))
+
+            else:
+
+                print(lyric.center(terminal_width))
