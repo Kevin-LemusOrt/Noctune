@@ -21,6 +21,16 @@ def render_current_lyric(
 
     print("-" * terminal_width)
 
+    print(
+        "[P] play/pause "
+        "[N] Next "
+        "[B] Previous "
+        "[Q] Quit "
+        .center(terminal_width)
+    )
+
+    print()
+
     available_height = terminal_height - 6
 
     top_padding = available_height // 3

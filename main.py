@@ -8,6 +8,8 @@ from lyrics.parser import parse_lyrics
 
 from ui.renderer import render_current_lyric
 
+from controls.commands import start_listener
+
 import time
 import os
 
@@ -20,6 +22,7 @@ show_index = 0
 
 last_time = 0
 
+start_listener()
 
 while True:
 
@@ -86,8 +89,13 @@ while True:
 
         break
     
-    except Exception as e:
-        
-        print("Esperando Spotify...")
+    except Exception:
 
-        time.sleep(2)
+        render_current_lyric(
+            0,
+            [],
+            0,
+            "Esperando cancion o Spotify"
+        )
+
+        time.sleep(1)
