@@ -8,8 +8,6 @@ from lyrics.parser import parse_lyrics
 
 from ui.renderer import render_current_lyric
 
-from controls.commands import start_listener
-
 import time
 import os
 
@@ -22,7 +20,6 @@ show_index = 0
 
 last_time = 0
 
-start_listener()
 
 while True:
 
@@ -83,19 +80,13 @@ while True:
 
         time.sleep(0.03)
 
-    except KeyboardInterrupt:
-
-        os.system("tmux kill-session -t spotyterminal")
-
-        break
-    
     except Exception:
 
         render_current_lyric(
             0,
             [],
             0,
-            "Esperando cancion o Spotify"
+            "Esperando canción o Spotify"
         )
 
         time.sleep(1)

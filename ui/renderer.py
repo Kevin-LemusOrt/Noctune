@@ -83,7 +83,15 @@ def render_current_lyric(
 
                 characters_per_second = (
                     len(lyric) / line_duration
-                ) * 0.85
+                )
+
+                if characters_per_second < 8:
+
+                    characters_per_second = 8
+
+                elif characters_per_second > 22:
+
+                    characters_per_second = 22
 
                 visible_characters = int(
                     elapsed * characters_per_second

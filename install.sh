@@ -64,6 +64,18 @@ else
 
     tmux set-option -t \$SESSION remain-on-exit off
 
+    tmux bind_key -n M-p \
+    run-shell "playerctl play-pause"
+
+    tmux bind_key -n M-n \
+    run-shell "playerctl next"
+
+    tmux bind_key -n M-b \
+    run-shell "playerctl previous"
+
+    tmux bind_key -n M-q \
+    kill-session
+
     tmux attach-session -t \$SESSION
 
 fi
