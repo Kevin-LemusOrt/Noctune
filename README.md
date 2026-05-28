@@ -29,7 +29,7 @@ Now Playing: Ases Falsos - Simetría
 * Letras sincronizadas en tiempo real
 * Animación progresiva de letras
 * Visualizador integrado con cava
-* ⌨Controles multimedia
+* Controles multimedia
 * Experiencia completamente en terminal
 
 ---
