@@ -50,7 +50,7 @@ Now Playing: Ases Falsos - Simetría
 Clona el repositorio:
 
 ```bash id="c23vlv"
-git clone TU_REPO
+git clone https://github.com/Kevin-LemusOrt/Noctune
 cd noctune
 ```
 
@@ -113,3 +113,4 @@ El instalador se encarga automáticamente de instalar todo lo necesario.
 * tmux
 * cava
 * playerctl
+
