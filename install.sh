@@ -1,7 +1,7 @@
 #!/bin/bash
 
 echo ""
-echo "Installing SpotyTerminal..."
+echo "Installing Noctune..."
 echo ""
 
 sudo apt update
@@ -20,7 +20,7 @@ echo ""
 
 if [ ! -d "venv" ]; then
 
-    python3 -m venv venv
+python3 -m venv venv
 
 fi
 
@@ -30,7 +30,15 @@ echo ""
 echo "Installing Python dependencies..."
 echo ""
 
+if [ -f "requirements.txt" ]; then
+
+pip install -r requirements.txt
+
+else
+
 pip install requests rich
+
+fi
 
 echo ""
 echo "Creating global command..."
@@ -40,48 +48,53 @@ mkdir -p ~/.local/bin
 
 PROJECT_DIR=$(pwd)
 
-cat > ~/.local/bin/spotyterminal << EOF
+cat > ~/.local/bin/noctune << EOF
 #!/bin/bash
 
-SESSION="spotyterminal"
+SESSION="noctune"
 
-if tmux has-session -t \$SESSION 2>/dev/null; then
+if tmux has-session -t $SESSION 2>/dev/null; then
 
-    tmux attach-session -t \$SESSION
+tmux attach-session -t \$SESSION
 
 else
 
-    tmux new-session -d -s \$SESSION
+tmux new-session -d -s \$SESSION
 
-    tmux send-keys -t \$SESSION \
-    "cd $PROJECT_DIR && source venv/bin/activate && python main.py" C-m
+tmux send-keys -t \$SESSION \
+"cd $PROJECT_DIR && source venv/bin/activate && python main.py" C-m
 
-    tmux split-window -v -t \$SESSION
+tmux split-window -v -t \$SESSION
 
-    tmux send-keys -t \$SESSION "cava" C-m
+tmux send-keys -t \$SESSION "cava" C-m
 
-    tmux select-pane -t 0
+tmux select-pane -t 0
 
-    tmux set-option -t \$SESSION remain-on-exit off
+tmux set-option -t \$SESSION remain-on-exit off
 
-    tmux bind_key -n M-p \
-    run-shell "playerctl play-pause"
+tmux set-option -g pane-border-status off
+tmux set-option -g pane-active-border-style fg=black
+tmux set-option -g pane-border-style fg=black
 
-    tmux bind_key -n M-n \
-    run-shell "playerctl next"
+tmux bind-key -n M-p \
+run-shell "playerctl play-pause"
 
-    tmux bind_key -n M-b \
-    run-shell "playerctl previous"
+tmux bind-key -n M-n \
+run-shell "playerctl next"
 
-    tmux bind_key -n M-q \
-    kill-session
+tmux bind-key -n M-b \
+run-shell "playerctl previous"
 
-    tmux attach-session -t \$SESSION
+tmux bind-key -n M-q \
+kill-session
+
+tmux attach-session -t \$SESSION
+```
 
 fi
 EOF
 
-chmod +x ~/.local/bin/spotyterminal
+chmod +x ~/.local/bin/noctune
 
 echo ""
 echo "Configuring PATH..."
@@ -91,21 +104,21 @@ SHELL_NAME=$(basename "$SHELL")
 
 if [ "$SHELL_NAME" = "zsh" ]; then
 
-    SHELL_RC="$HOME/.zshrc"
+SHELL_RC="$HOME/.zshrc"
 
 elif [ "$SHELL_NAME" = "bash" ]; then
 
-    SHELL_RC="$HOME/.bashrc"
+SHELL_RC="$HOME/.bashrc"
 
 else
 
-    SHELL_RC="$HOME/.profile"
+SHELL_RC="$HOME/.profile"
 
 fi
 
 if ! grep -q '.local/bin' "$SHELL_RC"; then
 
-    echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$SHELL_RC"
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$SHELL_RC"
 
 fi
 
@@ -118,4 +131,5 @@ echo "source $SHELL_RC"
 echo ""
 echo "Then launch with:"
 echo ""
-echo "spotyterminal"
+echo "noctune"
+
