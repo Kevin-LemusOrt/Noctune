@@ -19,9 +19,7 @@ echo "Preparing virtual environment..."
 echo ""
 
 if [ ! -d "venv" ]; then
-
-python3 -m venv venv
-
+    python3 -m venv venv
 fi
 
 source venv/bin/activate
@@ -31,13 +29,9 @@ echo "Installing Python dependencies..."
 echo ""
 
 if [ -f "requirements.txt" ]; then
-
-pip install -r requirements.txt
-
+    pip install -r requirements.txt
 else
-
-pip install requests rich
-
+    pip install requests rich
 fi
 
 echo ""
@@ -46,52 +40,28 @@ echo ""
 
 mkdir -p ~/.local/bin
 
-PROJECT_DIR=$(pwd)
+PROJECT_DIR="$(pwd)"
 
-cat > ~/.local/bin/noctune << EOF
+cat > ~/.local/bin/noctune <<EOF
 #!/bin/bash
 
 SESSION="noctune"
 
-if tmux has-session -t $SESSION 2>/dev/null; then
+if tmux has-session -t "\$SESSION" 2>/dev/null; then
+    tmux attach-session -t "\$SESSION"
+    exit 0
+fi
 
-tmux attach-session -t \$SESSION
+tmux new-session -d -s "\$SESSION"
 
-else
+tmux send-keys -t "\$SESSION" "cd $PROJECT_DIR && source venv/bin/activate && python main.py" C-m
 
-tmux new-session -d -s \$SESSION
-
-tmux send-keys -t \$SESSION \
-"cd $PROJECT_DIR && source venv/bin/activate && python main.py" C-m
-
-tmux split-window -v -t \$SESSION
-
-tmux send-keys -t \$SESSION "cava" C-m
+tmux split-window -v -t "\$SESSION"
+tmux send-keys -t "\$SESSION" "cava" C-m
 
 tmux select-pane -t 0
 
-tmux set-option -t \$SESSION remain-on-exit off
-
-tmux set-option -g pane-border-status off
-tmux set-option -g pane-active-border-style fg=black
-tmux set-option -g pane-border-style fg=black
-
-tmux bind-key -n M-p \
-run-shell "playerctl play-pause"
-
-tmux bind-key -n M-n \
-run-shell "playerctl next"
-
-tmux bind-key -n M-b \
-run-shell "playerctl previous"
-
-tmux bind-key -n M-q \
-kill-session
-
-tmux attach-session -t \$SESSION
-```
-
-fi
+tmux attach-session -t "\$SESSION"
 EOF
 
 chmod +x ~/.local/bin/noctune
@@ -103,23 +73,15 @@ echo ""
 SHELL_NAME=$(basename "$SHELL")
 
 if [ "$SHELL_NAME" = "zsh" ]; then
-
-SHELL_RC="$HOME/.zshrc"
-
+    SHELL_RC="$HOME/.zshrc"
 elif [ "$SHELL_NAME" = "bash" ]; then
-
-SHELL_RC="$HOME/.bashrc"
-
+    SHELL_RC="$HOME/.bashrc"
 else
-
-SHELL_RC="$HOME/.profile"
-
+    SHELL_RC="$HOME/.profile"
 fi
 
 if ! grep -q '.local/bin' "$SHELL_RC"; then
-
-echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$SHELL_RC"
-
+    echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$SHELL_RC"
 fi
 
 echo ""
