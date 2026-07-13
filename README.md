@@ -17,7 +17,7 @@ cuenta con:
 ![Caso2_letra no encontrada](assets/caso2.png)
 
 ### video de uso
-![Caso_uso](assets/noctune.gif)
+![Caso de uso](assets/noctune.gif)
 ---
 
 ## Características

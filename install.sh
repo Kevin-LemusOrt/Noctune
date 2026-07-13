@@ -4,15 +4,48 @@ echo ""
 echo "Installing Noctune..."
 echo ""
 
-sudo apt update
+install_system_dependencies() {
+    if command -v apt >/dev/null 2>&1; then
+        echo "Detected APT (Debian/Ubuntu)."
+        sudo apt update
+        sudo apt install -y \
+            python3 \
+            python3-venv \
+            python3-pip \
+            playerctl \
+            cava \
+            tmux
+    elif command -v dnf >/dev/null 2>&1; then
+        echo "Detected DNF (Fedora)."
+        sudo dnf install -y \
+            python3 \
+            python3-pip \
+            playerctl \
+            cava \
+            tmux
+    elif command -v pacman >/dev/null 2>&1; then
+        echo "Detected Pacman (Arch Linux)."
+        sudo pacman -Sy --needed \
+            python \
+            python-pip \
+            playerctl \
+            cava \
+            tmux
+    else
+        echo "Unsupported package manager."
+        echo "Install Python 3, playerctl, cava and tmux manually."
+        exit 1
+    fi
+}
 
-sudo apt install -y \
-python3 \
-python3-venv \
-python3-pip \
-playerctl \
-cava \
-tmux
+install_system_dependencies
+
+for command in python3 playerctl cava tmux; do
+    if ! command -v "$command" >/dev/null 2>&1; then
+        echo "Error: '$command' was not found after installation."
+        exit 1
+    fi
+done
 
 echo ""
 echo "Preparing virtual environment..."
@@ -94,4 +127,3 @@ echo ""
 echo "Then launch with:"
 echo ""
 echo "noctune"
-
