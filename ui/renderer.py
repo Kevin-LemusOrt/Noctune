@@ -1,4 +1,5 @@
 import shutil
+import sys
 import textwrap
 
 from ui.audio.cava_backend import CavaBackend
@@ -6,7 +7,12 @@ from ui.visualizers.cava import render as render_cava
 
 
 _cava_backend = None
+_cava_width = None
 
+
+# =============================================================
+# MAIN RENDERER
+# =============================================================
 
 def render_current_lyric(
     current_time,
@@ -18,358 +24,296 @@ def render_current_lyric(
     """
     Renderiza la interfaz completa de Noctune.
 
-    El renderer se encarga de:
-    - dimensiones de la terminal;
-    - distribución de la interfaz;
-    - encabezado;
-    - letras;
-    - ubicación del visualizador.
-
-    Los visualizadores se encargan únicamente
-    de convertir datos en elementos visuales.
+    La interfaz se adapta automáticamente al tamaño
+    actual de la terminal.
     """
 
-    terminal_size = shutil.get_terminal_size()
+    terminal_size = shutil.get_terminal_size(
+        fallback=(80, 24)
+    )
 
-    terminal_width = terminal_size.columns
-    terminal_height = terminal_size.lines
+    width = terminal_size.columns
+    height = terminal_size.lines
 
-    # Evita intentar dibujar una interfaz imposible de visualizar.
-    if terminal_width < 40 or terminal_height < 10:
-        _clear_screen()
-        print("Terminal too small for Noctune.")
+    if width < 40 or height < 8:
+        _draw_small_terminal(
+            width,
+            height
+        )
         return
 
-    _clear_screen()
+    frame = _build_frame(
+        current_time=current_time,
+        parsed_lyrics=parsed_lyrics,
+        current_index=current_index,
+        song_data=song_data,
+        width=width,
+        height=height,
+        visualizer_mode=visualizer_mode
+    )
+
+    _draw_frame(frame)
+
+
+# =============================================================
+# FRAME
+# =============================================================
+
+def _build_frame(
+    current_time,
+    parsed_lyrics,
+    current_index,
+    song_data,
+    width,
+    height,
+    visualizer_mode
+):
+    """
+    Construye el frame completo antes de dibujarlo.
+    """
+
+    frame = [
+        " " * width
+        for _ in range(height)
+    ]
 
     # ---------------------------------------------------------
     # HEADER
     # ---------------------------------------------------------
 
-    _render_header(
-        song_data,
-        terminal_width
+    frame[0] = _fit_line(
+        _center_line(
+            song_data,
+            width
+        ),
+        width
     )
 
+    if height > 1:
+        frame[1] = "─" * width
+
     # ---------------------------------------------------------
-    # LAYOUT
+    # VISUALIZER
     # ---------------------------------------------------------
 
     if visualizer_mode == "cava":
 
-        _render_cava_layout(
+        _build_cava_layout(
+            frame,
             current_time,
             parsed_lyrics,
             current_index,
-            terminal_width,
-            terminal_height
-        )
-
-    elif visualizer_mode in ("vinyl", "circular"):
-
-        _render_side_visualizer_layout(
-            current_time,
-            parsed_lyrics,
-            current_index,
-            terminal_width,
-            terminal_height,
-            visualizer_mode
+            width,
+            height
         )
 
     else:
 
-        # Si llega un modo desconocido,
-        # usamos Cava como predeterminado.
-
-        _render_cava_layout(
+        _build_cava_layout(
+            frame,
             current_time,
             parsed_lyrics,
             current_index,
-            terminal_width,
-            terminal_height
+            width,
+            height
         )
 
-
-# =============================================================
-# SCREEN
-# =============================================================
-
-def _clear_screen():
-    """Limpia la terminal usando secuencias ANSI."""
-
-    print("\033[2J\033[H", end="")
-
-
-# =============================================================
-# HEADER
-# =============================================================
-
-def _render_header(song_data, terminal_width):
-    """Renderiza artista y canción."""
-
-    print(song_data.center(terminal_width))
-    print("─" * terminal_width)
-
-
-# =============================================================
-# CAVA BACKEND
-# =============================================================
-
-def _get_cava_backend(width):
-    """
-    Obtiene la instancia persistente de Cava.
-
-    Cava se inicia una sola vez y permanece activo
-    mientras Noctune está funcionando.
-    """
-
-    global _cava_backend
-
-    if _cava_backend is None:
-
-        bars = max(
-            8,
-            min(64, width // 2)
-        )
-
-        _cava_backend = CavaBackend(
-            bars=bars,
-            framerate=30
-        )
-
-        _cava_backend.start()
-
-    return _cava_backend
-
-
-def stop_visualizer():
-    """
-    Detiene el backend del visualizador.
-
-    Debe llamarse cuando Noctune termina.
-    """
-
-    global _cava_backend
-
-    if _cava_backend is not None:
-
-        _cava_backend.stop()
-
-        _cava_backend = None
+    return frame
 
 
 # =============================================================
 # CAVA LAYOUT
 # =============================================================
 
-def _render_cava_layout(
+def _build_cava_layout(
+    frame,
     current_time,
     parsed_lyrics,
     current_index,
-    terminal_width,
-    terminal_height
+    width,
+    height
 ):
     """
-    Distribución para el visualizador Cava.
+    Distribución:
 
-    Layout:
+        Header
+        ──────
+        Letras
+        ──────
+        Cava
 
-    ┌──────────────────────────────┐
-    │          HEADER              │
-    ├──────────────────────────────┤
-    │                              │
-    │            LETRAS            │
-    │                              │
-    ├──────────────────────────────┤
-    │          VISUALIZADOR        │
-    │             CAVA             │
-    └──────────────────────────────┘
+    La distribución vertical se mantiene igual.
     """
 
-    # Aproximadamente un tercio de la pantalla
-    # queda reservado para Cava.
+    lyrics_start = 2
+
+    separator_height = 1
+
+    # ---------------------------------------------------------
+    # DISTRIBUCIÓN VERTICAL ACTUAL
+    # ---------------------------------------------------------
 
     visualizer_height = max(
         4,
-        terminal_height // 3
+        height // 3
     )
 
     lyrics_height = (
-        terminal_height
-        - visualizer_height
+        height
         - 2
+        - separator_height
+        - visualizer_height
     )
 
-    # ---------------------------------------------------------
-    # LYRICS
-    # ---------------------------------------------------------
+    if lyrics_height < 3:
 
-    _render_lyrics(
-        current_time,
-        parsed_lyrics,
-        current_index,
-        terminal_width,
-        lyrics_height
-    )
+        lyrics_height = 3
 
-    # ---------------------------------------------------------
-    # SEPARATOR
-    # ---------------------------------------------------------
+        visualizer_height = (
+            height
+            - 2
+            - separator_height
+            - lyrics_height
+        )
 
-    print("─" * terminal_width)
-
-    # ---------------------------------------------------------
-    # VISUALIZER
-    # ---------------------------------------------------------
-
-    _render_cava_visualizer(
-        terminal_width,
+    visualizer_height = max(
+        1,
         visualizer_height
     )
 
-
-def _render_cava_visualizer(width, height):
-    """
-    Obtiene un frame del backend de Cava y lo convierte
-    en una visualización mediante ui.visualizers.cava.
-    """
-
-    try:
-
-        backend = _get_cava_backend(width)
-
-        bars = backend.read()
-
-        lines = render_cava(
-            bars,
-            width,
-            height
-        )
-
-        for line in lines:
-            print(line)
-
-    except Exception:
-
-        # Si Cava falla, mantenemos la interfaz funcionando
-        # en lugar de cerrar Noctune.
-
-        for _ in range(height):
-            print(" " * width)
-
-
-# =============================================================
-# SIDE VISUALIZER LAYOUT
-# =============================================================
-
-def _render_side_visualizer_layout(
-    current_time,
-    parsed_lyrics,
-    current_index,
-    terminal_width,
-    terminal_height,
-    visualizer_mode
-):
-    """
-    Distribución para Vinyl y Circular.
-
-    Layout:
-
-    ┌──────────────────────┬───────────────────────┐
-    │                      │                       │
-    │     VISUALIZADOR     │        LETRAS         │
-    │                      │                       │
-    │          ◉           │      LÍNEA ACTUAL     │
-    │                      │                       │
-    └──────────────────────┴───────────────────────┘
-    """
-
-    # El visualizador ocupa aproximadamente un tercio
-    # del ancho disponible.
-
-    visualizer_width = max(
-        18,
-        terminal_width // 3
+    separator_row = (
+        lyrics_start
+        + lyrics_height
     )
 
-    lyrics_width = (
-        terminal_width
-        - visualizer_width
-        - 1
+    visualizer_start = (
+        separator_row
+        + separator_height
     )
 
     # ---------------------------------------------------------
-    # VISUALIZER
+    # LETRAS
     # ---------------------------------------------------------
 
-    _render_side_visualizer(
-        visualizer_width,
-        terminal_height,
-        visualizer_mode
-    )
-
-    # Separador vertical.
-
-    print("│", end="")
-
-    # ---------------------------------------------------------
-    # LYRICS
-    # ---------------------------------------------------------
-
-    _render_lyrics(
+    lyrics_lines = _build_lyrics(
         current_time,
         parsed_lyrics,
         current_index,
-        lyrics_width,
-        terminal_height,
-        inline=True
+        width,
+        lyrics_height
     )
+
+    for index, line in enumerate(
+        lyrics_lines
+    ):
+
+        row = lyrics_start + index
+
+        if row >= separator_row:
+            break
+
+        if row >= height:
+            break
+
+        frame[row] = _fit_line(
+            line,
+            width
+        )
+
+    # ---------------------------------------------------------
+    # SEPARADOR
+    # ---------------------------------------------------------
+
+    if separator_row < height:
+
+        frame[separator_row] = (
+            "─" * width
+        )
+
+    # ---------------------------------------------------------
+    # CAVA
+    # ---------------------------------------------------------
+
+    cava_lines = _render_cava(
+        width,
+        visualizer_height
+    )
+
+    for index, line in enumerate(
+        cava_lines
+    ):
+
+        row = visualizer_start + index
+
+        if row >= height:
+            break
+
+        frame[row] = _fit_line(
+            line,
+            width
+        )
 
 
 # =============================================================
 # LYRICS
 # =============================================================
 
-def _render_lyrics(
+def _build_lyrics(
     current_time,
     parsed_lyrics,
     current_index,
     width,
-    height,
-    inline=False
+    height
 ):
     """
-    Renderiza las letras sincronizadas.
+    Construye las líneas visibles de la letra.
 
-    Mantiene hasta dos líneas anteriores
-    y nunca muestra líneas futuras.
+    Se muestran:
+        - hasta 2 líneas anteriores
+        - línea actual
+
+    No se muestran líneas futuras.
     """
 
     if height <= 0:
-        return
+        return []
 
     if not parsed_lyrics:
 
-        _render_waiting_message(
-            current_time,
-            width,
-            height,
-            inline
+        dots = int(
+            current_time % 4
         )
 
-        return
+        waiting_text = (
+            "No lyrics found"
+            + "." * dots
+        )
+
+        return _center_vertical(
+            [
+                _center_line(
+                    waiting_text,
+                    width
+                )
+            ],
+            height
+        )
 
     # ---------------------------------------------------------
-    # VISIBLE LYRICS
+    # VALIDAR ÍNDICE
     # ---------------------------------------------------------
 
-    # Mostramos:
-    #
-    # línea anterior
-    # línea anterior
-    # línea actual
-    #
-    # Nunca mostramos líneas futuras.
+    current_index = max(
+        0,
+        min(
+            current_index,
+            len(parsed_lyrics) - 1
+        )
+    )
+
+    # ---------------------------------------------------------
+    # LÍNEAS VISIBLES
+    # ---------------------------------------------------------
 
     start_index = max(
         0,
@@ -385,21 +329,19 @@ def _render_lyrics(
         start_index:end_index
     ]
 
-    # ---------------------------------------------------------
-    # WRAPPING
-    # ---------------------------------------------------------
-
-    total_lines = 0
-
-    wrapped_lines = []
+    lines = []
 
     for index, (_, lyric) in enumerate(
         visible_lyrics
     ):
 
-        real_index = start_index + index
+        real_index = (
+            start_index + index
+        )
 
-        # Animación únicamente para la línea actual.
+        # -----------------------------------------------------
+        # ANIMACIÓN DE LA LÍNEA ACTUAL
+        # -----------------------------------------------------
 
         if real_index == current_index:
 
@@ -410,60 +352,34 @@ def _render_lyrics(
                 lyric
             )
 
-        lines = textwrap.wrap(
+        # -----------------------------------------------------
+        # WRAP
+        # -----------------------------------------------------
+
+        wrapped = textwrap.wrap(
             lyric,
-            width=max(1, width - 2)
+            width=max(
+                1,
+                width - 2
+            )
         )
 
-        if not lines:
-            lines = [""]
+        if not wrapped:
+            wrapped = [""]
 
-        wrapped_lines.append(
-            (real_index, lines)
-        )
+        for line in wrapped:
 
-        total_lines += len(lines)
-
-    # ---------------------------------------------------------
-    # VERTICAL CENTERING
-    # ---------------------------------------------------------
-
-    top_padding = max(
-        0,
-        (height - total_lines) // 2
-    )
-
-    if not inline:
-
-        for _ in range(top_padding):
-            print()
-
-    else:
-
-        for _ in range(top_padding):
-            print(
-                " " * width + "│"
+            lines.append(
+                _center_line(
+                    line,
+                    width
+                )
             )
 
-    # ---------------------------------------------------------
-    # DRAW LYRICS
-    # ---------------------------------------------------------
-
-    for real_index, lines in wrapped_lines:
-
-        for line in lines:
-
-            rendered_line = line.center(width)
-
-            if inline:
-
-                print(
-                    rendered_line + "│"
-                )
-
-            else:
-
-                print(rendered_line)
+    return _center_vertical(
+        lines,
+        height
+    )
 
 
 # =============================================================
@@ -477,24 +393,24 @@ def _animate_current_lyric(
     lyric
 ):
     """
-    Calcula la cantidad de caracteres visibles
-    de la línea actual.
+    Revela progresivamente la línea actual.
     """
 
     timestamp = parsed_lyrics[
         current_index
     ][0]
 
-    elapsed = current_time - timestamp
+    elapsed = (
+        current_time
+        - timestamp
+    )
 
     if elapsed < 0:
         elapsed = 0
 
-    # ---------------------------------------------------------
-    # LINE DURATION
-    # ---------------------------------------------------------
-
-    if current_index + 1 < len(parsed_lyrics):
+    if current_index + 1 < len(
+        parsed_lyrics
+    ):
 
         next_timestamp = parsed_lyrics[
             current_index + 1
@@ -502,7 +418,9 @@ def _animate_current_lyric(
 
     else:
 
-        next_timestamp = timestamp + 5
+        next_timestamp = (
+            timestamp + 5
+        )
 
     line_duration = (
         next_timestamp
@@ -512,35 +430,30 @@ def _animate_current_lyric(
     if line_duration <= 0:
         line_duration = 1
 
-    # ---------------------------------------------------------
-    # CHARACTERS PER SECOND
-    # ---------------------------------------------------------
-
     characters_per_second = (
         len(lyric)
         / line_duration
     )
 
-    # Evitamos animaciones demasiado lentas
-    # o demasiado rápidas.
-
     characters_per_second = max(
         8,
-        min(22, characters_per_second)
+        min(
+            22,
+            characters_per_second
+        )
     )
-
-    # ---------------------------------------------------------
-    # VISIBLE CHARACTERS
-    # ---------------------------------------------------------
 
     visible_characters = int(
         elapsed
         * characters_per_second
     )
 
-    visible_characters = min(
-        visible_characters,
-        len(lyric)
+    visible_characters = max(
+        0,
+        min(
+            visible_characters,
+            len(lyric)
+        )
     )
 
     return lyric[
@@ -549,90 +462,300 @@ def _animate_current_lyric(
 
 
 # =============================================================
-# WAITING MESSAGE
+# CAVA BACKEND
 # =============================================================
 
-def _render_waiting_message(
-    current_time,
-    width,
-    height,
-    inline=False
-):
-    """Muestra un mensaje mientras no existen letras."""
-
-    dots = int(
-        current_time % 4
-    )
-
-    waiting_text = (
-        "No lyrics found"
-        + ("." * dots)
-    )
-
-    top_padding = max(
-        0,
-        (height - 1) // 2
-    )
-
-    if inline:
-
-        for _ in range(top_padding):
-
-            print(
-                " " * width + "│"
-            )
-
-        print(
-            waiting_text.center(width)
-            + "│"
-        )
-
-    else:
-
-        for _ in range(top_padding):
-            print()
-
-        print(
-            waiting_text.center(width)
-        )
-
-
-# =============================================================
-# SIDE VISUALIZER PLACEHOLDER
-# =============================================================
-
-def _render_side_visualizer(
-    width,
-    height,
-    visualizer_mode
-):
+def _get_cava_backend(width):
     """
-    Reserva temporalmente el área lateral.
+    Obtiene el backend de Cava correspondiente
+    al ancho actual de la terminal.
 
-    Vinyl y Circular todavía no están conectados.
+    Si la terminal cambia de tamaño, Cava se
+    reinicia automáticamente con el nuevo número
+    de barras.
     """
 
-    label = (
-        f"[ {visualizer_mode.upper()} ]"
+    global _cava_backend
+    global _cava_width
+
+    # ---------------------------------------------------------
+    # PRIMER INICIO
+    # ---------------------------------------------------------
+
+    if _cava_backend is None:
+
+        _cava_backend = CavaBackend(
+            bars=max(1, width),
+            framerate=30
+        )
+
+        _cava_backend.start()
+
+        _cava_width = width
+
+        return _cava_backend
+
+    # ---------------------------------------------------------
+    # CAMBIO DE ANCHO
+    # ---------------------------------------------------------
+
+    if _cava_width != width:
+
+        # Detener Cava anterior.
+
+        _cava_backend.stop()
+
+        # Crear una instancia nueva con el
+        # ancho actualizado.
+
+        _cava_backend = CavaBackend(
+            bars=max(1, width),
+            framerate=30
+        )
+
+        _cava_backend.start()
+
+        _cava_width = width
+
+    return _cava_backend
+
+
+def _render_cava(
+    width,
+    height
+):
+    """
+    Obtiene el último frame de Cava y lo
+    convierte en líneas para la terminal.
+    """
+
+    if width <= 0 or height <= 0:
+        return []
+
+    try:
+
+        backend = _get_cava_backend(
+            width
+        )
+
+        bars = backend.read()
+
+        # Cava todavía no ha generado un frame.
+
+        if bars is None:
+
+            return [
+                " " * width
+                for _ in range(height)
+            ]
+
+        lines = render_cava(
+            bars,
+            width,
+            height
+        )
+
+        return lines[:height]
+
+    except Exception:
+
+        return [
+            " " * width
+            for _ in range(height)
+        ]
+
+
+def stop_visualizer():
+    """
+    Detiene Cava y libera todos sus recursos.
+    """
+
+    global _cava_backend
+    global _cava_width
+
+    if _cava_backend is not None:
+
+        _cava_backend.stop()
+
+        _cava_backend = None
+
+    _cava_width = None
+
+
+# =============================================================
+# FRAME DRAWING
+# =============================================================
+
+def _draw_frame(frame):
+    """
+    Dibuja el frame utilizando ANSI.
+
+    No limpia toda la terminal en cada actualización,
+    evitando parpadeos.
+    """
+
+    if not frame:
+        return
+
+    output = []
+
+    for row, line in enumerate(
+        frame,
+        start=1
+    ):
+
+        output.append(
+            f"\033[{row};1H"
+        )
+
+        output.append(
+            "\033[2K"
+        )
+
+        output.append(
+            line
+        )
+
+    sys.stdout.write(
+        "".join(output)
     )
 
-    top_padding = max(
-        0,
-        (height - 1) // 2
+    sys.stdout.flush()
+
+
+# =============================================================
+# TEXT HELPERS
+# =============================================================
+
+def _center_line(
+    text,
+    width
+):
+    """
+    Centra horizontalmente un texto.
+    """
+
+    if width <= 0:
+        return ""
+
+    text = str(text)
+
+    if len(text) > width:
+        text = text[:width]
+
+    padding = (
+        width - len(text)
     )
 
-    for row in range(height):
+    left = padding // 2
+    right = padding - left
 
-        if row == top_padding:
+    return (
+        (" " * left)
+        + text
+        + (" " * right)
+    )
 
-            print(
-                label.center(width),
-                end=""
-            )
 
-        else:
+def _fit_line(
+    text,
+    width
+):
+    """
+    Garantiza que una línea tenga exactamente
+    el ancho de la terminal.
+    """
 
-            print(
-                " " * width,
-                end=""
-            )
+    if width <= 0:
+        return ""
+
+    text = str(text)
+
+    if len(text) > width:
+        return text[:width]
+
+    return text + (
+        " " * (
+            width - len(text)
+        )
+    )
+
+
+def _center_vertical(
+    lines,
+    height
+):
+    """
+    Centra un bloque verticalmente.
+    """
+
+    if height <= 0:
+        return []
+
+    lines = list(lines)
+
+    if len(lines) >= height:
+        return lines[-height:]
+
+    remaining = (
+        height - len(lines)
+    )
+
+    top = remaining // 2
+    bottom = remaining - top
+
+    return (
+        ([""] * top)
+        + lines
+        + ([""] * bottom)
+    )
+
+
+# =============================================================
+# SMALL TERMINAL
+# =============================================================
+
+def _draw_small_terminal(
+    width,
+    height
+):
+    """
+    Mensaje para terminales demasiado pequeñas.
+    """
+
+    output = "\033[H"
+
+    message = (
+        "Terminal too small for Noctune."
+    )
+
+    if width > 0:
+
+        message = _center_line(
+            message,
+            width
+        )
+
+    total_rows = max(
+        1,
+        height
+    )
+
+    for row in range(
+        1,
+        total_rows + 1
+    ):
+
+        output += (
+            f"\033[{row};1H"
+            "\033[2K"
+        )
+
+        if row == total_rows:
+            output += message
+
+    sys.stdout.write(
+        output
+    )
+
+    sys.stdout.flush()

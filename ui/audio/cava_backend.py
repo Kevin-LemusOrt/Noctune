@@ -2,16 +2,16 @@ import os
 import shutil
 import subprocess
 import tempfile
+import threading
 
 
 class CavaBackend:
     """
-    Gestiona una instancia interna de Cava.
+    Backend de audio para Noctune.
 
-    Cava funciona como backend de análisis de audio:
-    - No dibuja nada en la terminal.
-    - No controla la interfaz.
-    - Produce valores numéricos del espectro.
+    Cava analiza el audio y entrega frames mediante stdout.
+    Un hilo independiente mantiene actualizado el último frame
+    disponible para que el renderer nunca tenga que esperar a Cava.
     """
 
     def __init__(self, bars=32, framerate=60):
@@ -21,12 +21,17 @@ class CavaBackend:
         self.process = None
         self.config_path = None
 
-    # ---------------------------------------------------------
+        self._latest_frame = None
+        self._running = False
+        self._reader_thread = None
+        self._lock = threading.Lock()
+
+    # =========================================================
     # LIFECYCLE
-    # ---------------------------------------------------------
+    # =========================================================
 
     def start(self):
-        """Inicia la instancia interna de Cava."""
+        """Inicia Cava y su lector de frames."""
 
         if self.process is not None:
             return
@@ -41,13 +46,24 @@ class CavaBackend:
         self.process = subprocess.Popen(
             ["cava", "-p", self.config_path],
             stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
             text=True,
             bufsize=1
         )
 
+        self._running = True
+
+        self._reader_thread = threading.Thread(
+            target=self._read_loop,
+            daemon=True
+        )
+
+        self._reader_thread.start()
+
     def stop(self):
-        """Detiene Cava y elimina su configuración temporal."""
+        """Detiene Cava y limpia sus recursos."""
+
+        self._running = False
 
         if self.process is not None:
 
@@ -62,38 +78,64 @@ class CavaBackend:
 
             self.process = None
 
+        if self._reader_thread is not None:
+
+            self._reader_thread.join(timeout=1)
+
+            self._reader_thread = None
+
         self._remove_config()
 
-    # ---------------------------------------------------------
+        with self._lock:
+            self._latest_frame = None
+
+    # =========================================================
     # DATA
-    # ---------------------------------------------------------
+    # =========================================================
 
     def read(self):
         """
-        Lee un frame del espectro.
+        Devuelve inmediatamente el último frame disponible.
 
-        Devuelve:
-            list[float] | None
+        Nunca espera a Cava.
+        """
 
-        Los valores están normalizados entre 0.0 y 1.0.
+        with self._lock:
+            if self._latest_frame is None:
+                return None
+
+            return self._latest_frame.copy()
+
+    def _read_loop(self):
+        """
+        Lee continuamente stdout de Cava en segundo plano.
+
+        El renderer no participa en esta lectura.
         """
 
         if self.process is None:
-            return None
+            return
 
         if self.process.stdout is None:
-            return None
+            return
 
-        line = self.process.stdout.readline()
+        while self._running:
 
-        if not line:
-            return None
+            line = self.process.stdout.readline()
 
-        return self._parse_frame(line)
+            if not line:
+                break
 
-    # ---------------------------------------------------------
+            frame = self._parse_frame(line)
+
+            if frame is not None:
+
+                with self._lock:
+                    self._latest_frame = frame
+
+    # =========================================================
     # CONFIG
-    # ---------------------------------------------------------
+    # =========================================================
 
     def _create_config(self):
         """
@@ -130,7 +172,7 @@ reverse = 0
 
 [smoothing]
 
-noise_reduction = 65
+noise_reduction = 0
 """
 
         file_descriptor, path = tempfile.mkstemp(
@@ -138,23 +180,30 @@ noise_reduction = 65
             suffix=".conf"
         )
 
-        with os.fdopen(file_descriptor, "w") as file:
+        with os.fdopen(
+            file_descriptor,
+            "w"
+        ) as file:
+
             file.write(config)
 
         return path
 
-    # ---------------------------------------------------------
+    # =========================================================
     # PARSING
-    # ---------------------------------------------------------
+    # =========================================================
 
     def _parse_frame(self, line):
         """
-        Convierte una línea ASCII de Cava en valores normalizados.
+        Convierte un frame ASCII de Cava en valores normalizados.
 
-        Cava produce algo conceptualmente parecido a:
+        Ejemplo:
 
             120;340;700;1000;820;...
 
+        Resultado:
+
+            [0.12, 0.34, 0.70, 1.0, 0.82, ...]
         """
 
         line = line.strip()
@@ -163,11 +212,13 @@ noise_reduction = 65
             return None
 
         try:
+
             values = [
                 int(value)
                 for value in line.split(";")
                 if value
             ]
+
         except ValueError:
             return None
 
@@ -177,30 +228,46 @@ noise_reduction = 65
         maximum = 1000
 
         return [
-            max(0.0, min(1.0, value / maximum))
+            max(
+                0.0,
+                min(
+                    1.0,
+                    value / maximum
+                )
+            )
             for value in values
         ]
 
-    # ---------------------------------------------------------
+    # =========================================================
     # CLEANUP
-    # ---------------------------------------------------------
+    # =========================================================
 
     def _remove_config(self):
-        """Elimina la configuración temporal de Cava."""
+        """Elimina la configuración temporal."""
 
         if self.config_path is None:
             return
 
         try:
             os.remove(self.config_path)
+
         except FileNotFoundError:
             pass
 
         self.config_path = None
 
+    # =========================================================
+    # CONTEXT MANAGER
+    # =========================================================
+
     def __enter__(self):
         self.start()
         return self
 
-    def __exit__(self, exc_type, exc_value, traceback):
+    def __exit__(
+        self,
+        exc_type,
+        exc_value,
+        traceback
+    ):
         self.stop()
