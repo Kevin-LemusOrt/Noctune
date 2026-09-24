@@ -1,16 +1,57 @@
+from ui.audio.cava_config import CavaConfig
+
+
 BAR_LEVELS = " ▁▂▃▄▅▆▇█"
+ANSI_RESET = "\033[0m"
 
 
 class CavaVisualizer:
-    """
-    Visualizador de espectro para Noctune.
-
-    Recibe los datos generados por Cava y se encarga
-    únicamente de convertirlos en caracteres.
-    """
-
     def __init__(self):
         self.previous_bars = []
+
+        self.config = (
+            CavaConfig()
+            .load()
+        )
+
+        # ---------------------------------------------------------
+        # CONFIGURACIÓN DE CAVA
+        # ---------------------------------------------------------
+
+        self.bar_width = self.config.get_int(
+            "general",
+            "bar_width",
+            1
+        )
+
+        self.bar_spacing = self.config.get_int(
+            "general",
+            "bar_spacing",
+            0
+        )
+
+        self.center_align = self.config.get_bool(
+            "general",
+            "center_align",
+            False
+        )
+
+        self.max_height = self.config.get_int(
+            "general",
+            "max_height",
+            100
+        )
+
+        # Valores seguros
+        self.bar_width = max(
+            1,
+            self.bar_width
+        )
+
+        self.bar_spacing = max(
+            0,
+            self.bar_spacing
+        )
 
     def render(
         self,
@@ -19,15 +60,8 @@ class CavaVisualizer:
         height
     ):
         """
-        Genera las líneas del visualizador.
-
-        Parameters:
-            bars: valores entre 0.0 y 1.0
-            width: ancho disponible
-            height: alto disponible
-
-        Returns:
-            list[str]
+        Renderiza las barras utilizando la configuración
+        activa de Cava.
         """
 
         if width <= 0 or height <= 0:
@@ -39,59 +73,100 @@ class CavaVisualizer:
                 for _ in range(height)
             ]
 
-        # Ajustar las barras al ancho actual.
+        # ---------------------------------------------------------
+        # AJUSTAR BARRAS AL ANCHO
+        # ---------------------------------------------------------
+
         bars = _fit_bars_to_width(
             bars,
-            width
+            width,
+            self.bar_width,
+            self.bar_spacing
         )
 
-        # Suavizar el movimiento.
+        # ---------------------------------------------------------
+        # SUAVIZADO
+        # ---------------------------------------------------------
+
         bars = self._smooth_bars(
             bars
         )
 
-        # Aprovechar mejor la altura disponible.
+        # ---------------------------------------------------------
+        # NORMALIZACIÓN
+        # ---------------------------------------------------------
+
         bars = _normalize_bars(
             bars
         )
 
+        # ---------------------------------------------------------
+        # DIBUJAR
+        # ---------------------------------------------------------
+
         return _draw_bars(
             bars,
             width,
-            height
+            height,
+            self.bar_width,
+            self.bar_spacing,
+            self.center_align,
+            self.max_height
         )
 
-    # =========================================================
-    # SMOOTHING
-    # =========================================================
+    def colorize(
+        self,
+        lines,
+        width
+    ):
+        """Aplica color sin alterar los caracteres ni el ancho visible."""
+
+        colors = self.config.get_colors()
+        foreground = colors.get("foreground")
+
+        if not foreground:
+            foreground = colors.get("color")
+
+        if not foreground:
+            return lines
+
+        colored_lines = []
+
+        for line in lines:
+            result = []
+
+            for character in line[:width]:
+                if character == " ":
+                    result.append(character)
+                    continue
+
+                result.extend([
+                    _ansi_fg(foreground),
+                    character,
+                    ANSI_RESET
+                ])
+
+            colored_lines.append(
+                "".join(result)
+                + (" " * max(0, width - len(line)))
+            )
+
+        return colored_lines
 
     def _smooth_bars(
         self,
         bars
     ):
         """
-        Suaviza el movimiento de las barras.
-
-        Si cambia la cantidad de barras debido a un resize
-        de la terminal, se reinicia el historial.
+        Suaviza los cambios entre frames.
         """
-
-        # -----------------------------------------------------
-        # PRIMER FRAME O CAMBIO DE TAMAÑO
-        # -----------------------------------------------------
 
         if (
             not self.previous_bars
             or len(self.previous_bars) != len(bars)
         ):
-
             self.previous_bars = bars.copy()
-
             return bars
-
-        # -----------------------------------------------------
-        # SUAVIZADO NORMAL
-        # -----------------------------------------------------
 
         smoothed = []
 
@@ -102,16 +177,12 @@ class CavaVisualizer:
 
             if current > previous:
 
-                # Ataque rápido.
-
                 value = (
                     previous * 0.25
                     + current * 0.75
                 )
 
             else:
-
-                # Caída progresiva.
 
                 value = (
                     previous * 0.80
@@ -133,27 +204,19 @@ class CavaVisualizer:
         return smoothed
 
 
-# =============================================================
-# PUBLIC RENDER FUNCTION
-# =============================================================
-
 def render(
     bars,
     width,
     height
 ):
     """
-    Función pública utilizada por renderer.py.
-
-    Mantiene una única instancia del visualizador
-    para conservar el suavizado entre frames.
+    Punto de entrada utilizado por renderer.py.
     """
 
     if not hasattr(
         render,
         "_visualizer"
     ):
-
         render._visualizer = (
             CavaVisualizer()
         )
@@ -165,65 +228,141 @@ def render(
     )
 
 
-# =============================================================
-# BAR FITTING
-# =============================================================
+def colorize(
+    lines,
+    width
+):
+    """Colorea líneas ya ajustadas, conservando su contenido visible."""
+
+    if not hasattr(render, "_visualizer"):
+        render._visualizer = CavaVisualizer()
+
+    return render._visualizer.colorize(
+        lines,
+        width
+    )
+
+
+def _ansi_fg(color):
+    color = str(color).strip()
+
+    if color.startswith("#"):
+        color = color[1:]
+
+    if len(color) != 6:
+        return ""
+
+    try:
+        red = int(color[0:2], 16)
+        green = int(color[2:4], 16)
+        blue = int(color[4:6], 16)
+    except ValueError:
+        return ""
+
+    return f"\033[38;2;{red};{green};{blue}m"
+
 
 def _fit_bars_to_width(
     bars,
-    width
+    width,
+    bar_width=1,
+    bar_spacing=0
 ):
     """
-    Ajusta las barras al ancho de la terminal.
+    Ajusta la cantidad de barras al ancho disponible.
 
-    Si hay más barras que columnas:
-        reduce usando el máximo de cada grupo.
+    Respeta bar_width y bar_spacing de Cava.
 
-    Si hay menos barras:
-        las interpola para ocupar todo el ancho.
+    Si hay demasiadas barras:
+        se reducen mediante downsampling.
+
+    Si hay pocas:
+        se interpolan para aprovechar
+        todo el espacio horizontal disponible.
     """
 
     if width <= 0:
         return []
 
     if not bars:
-        return [0.0] * width
+        return []
 
-    if len(bars) == width:
-        return bars
+    bar_width = max(
+        1,
+        bar_width
+    )
+
+    bar_spacing = max(
+        0,
+        bar_spacing
+    )
+
+    # ---------------------------------------------------------
+    # ESPACIO UTILIZADO POR CADA BARRA
+    # ---------------------------------------------------------
+
+    cell_width = (
+        bar_width
+        + bar_spacing
+    )
+
+    # Cantidad máxima de barras que caben.
+    #
+    # El +bar_spacing permite que la última barra
+    # no necesite espacio de separación después de ella.
+    max_bars = (
+        width
+        + bar_spacing
+    ) // cell_width
+
+    max_bars = max(
+        1,
+        max_bars
+    )
 
     # ---------------------------------------------------------
     # DEMASIADAS BARRAS
     # ---------------------------------------------------------
 
-    if len(bars) > width:
+    if len(bars) > max_bars:
 
         return _downsample(
             bars,
-            width
+            max_bars
         )
 
     # ---------------------------------------------------------
-    # MENOS BARRAS QUE COLUMNAS
+    # POCAS BARRAS
+    #
+    # Interpolamos para llenar horizontalmente
+    # el espacio disponible.
     # ---------------------------------------------------------
 
-    if len(bars) == 1:
+    target_size = max_bars
 
-        return bars * width
+    if len(bars) == target_size:
+        return bars
+
+    if len(bars) == 1:
+        return bars * target_size
 
     result = []
 
     source_size = len(bars)
 
-    for index in range(width):
+    for index in range(
+        target_size
+    ):
 
         position = (
             index
             * (source_size - 1)
-            / (width - 1)
+            / (target_size - 1)
         )
 
-        left = int(position)
+        left = int(
+            position
+        )
 
         right = min(
             left + 1,
@@ -231,7 +370,8 @@ def _fit_bars_to_width(
         )
 
         fraction = (
-            position - left
+            position
+            - left
         )
 
         value = (
@@ -253,9 +393,15 @@ def _downsample(
     target_size
 ):
     """
-    Reduce una lista de barras conservando
-    el máximo de cada grupo.
+    Reduce la cantidad de barras conservando
+    los picos de cada grupo.
     """
+
+    if target_size <= 0:
+        return []
+
+    if len(values) <= target_size:
+        return values.copy()
 
     result = []
 
@@ -285,13 +431,10 @@ def _downsample(
         ]
 
         if chunk:
-
             result.append(
                 max(chunk)
             )
-
         else:
-
             result.append(
                 0.0
             )
@@ -299,19 +442,11 @@ def _downsample(
     return result
 
 
-# =============================================================
-# NORMALIZATION
-# =============================================================
-
 def _normalize_bars(
     bars
 ):
     """
-    Escala el frame para aprovechar mejor
-    la altura disponible.
-
-    La barra más alta llega a 1.0 y las demás
-    conservan su proporción relativa.
+    Normaliza las barras entre 0.0 y 1.0.
     """
 
     if not bars:
@@ -336,31 +471,107 @@ def _normalize_bars(
     ]
 
 
-# =============================================================
-# DRAWING
-# =============================================================
-
 def _draw_bars(
     bars,
     width,
-    height
+    height,
+    bar_width=1,
+    bar_spacing=0,
+    center_align=False,
+    max_height=100
 ):
     """
-    Convierte las barras normalizadas
-    en caracteres de terminal.
+    Dibuja las barras respetando:
+
+        bar_width
+        bar_spacing
+        center_align
+        max_height
     """
+
+    if width <= 0 or height <= 0:
+        return []
+
+    if not bars:
+        return [
+            " " * width
+            for _ in range(height)
+        ]
+
+    bar_width = max(
+        1,
+        bar_width
+    )
+
+    bar_spacing = max(
+        0,
+        bar_spacing
+    )
+
+    # ---------------------------------------------------------
+    # LIMITAR ALTURA SEGÚN max_height DE CAVA
+    # ---------------------------------------------------------
+
+    usable_height = min(
+        height,
+        max(
+            1,
+            int(
+                height
+                * max_height
+                / 100
+            )
+        )
+    )
+
+    # ---------------------------------------------------------
+    # ESPACIO TOTAL NECESARIO
+    # ---------------------------------------------------------
+
+    total_width = (
+        len(bars)
+        * bar_width
+        + max(
+            0,
+            len(bars) - 1
+        )
+        * bar_spacing
+    )
+
+    # ---------------------------------------------------------
+    # POSICIÓN HORIZONTAL
+    # ---------------------------------------------------------
+
+    if center_align:
+
+        offset = max(
+            0,
+            (
+                width
+                - total_width
+            ) // 2
+        )
+
+    else:
+
+        offset = 0
+
+    # ---------------------------------------------------------
+    # LIENZO
+    # ---------------------------------------------------------
 
     lines = [
         [" "] * width
         for _ in range(height)
     ]
 
-    for x, value in enumerate(
+    # ---------------------------------------------------------
+    # DIBUJAR CADA BARRA
+    # ---------------------------------------------------------
+
+    for index, value in enumerate(
         bars
     ):
-
-        if x >= width:
-            break
 
         value = max(
             0.0,
@@ -371,7 +582,8 @@ def _draw_bars(
         )
 
         exact_height = (
-            value * height
+            value
+            * usable_height
         )
 
         full_rows = int(
@@ -383,30 +595,54 @@ def _draw_bars(
             - full_rows
         )
 
+        x = (
+            offset
+            + index
+            * (
+                bar_width
+                + bar_spacing
+            )
+        )
+
         # -----------------------------------------------------
-        # FULL BLOCKS
+        # BARRA COMPLETA
         # -----------------------------------------------------
 
-        for offset in range(
+        for offset_y in range(
             full_rows
         ):
 
             y = (
                 height
                 - 1
-                - offset
+                - offset_y
             )
 
-            if y >= 0:
+            if y < 0:
+                break
 
-                lines[y][x] = "█"
+            for bar_x in range(
+                bar_width
+            ):
+
+                current_x = (
+                    x
+                    + bar_x
+                )
+
+                if (
+                    0
+                    <= current_x
+                    < width
+                ):
+                    lines[y][current_x] = "█"
 
         # -----------------------------------------------------
-        # PARTIAL BLOCK
+        # PARTE FRACCIONAL
         # -----------------------------------------------------
 
         if (
-            full_rows < height
+            full_rows < usable_height
             and remainder > 0
         ):
 
@@ -426,9 +662,29 @@ def _draw_bars(
 
             if y >= 0:
 
-                lines[y][x] = (
-                    BAR_LEVELS[level]
+                character = (
+                    BAR_LEVELS[
+                        level
+                    ]
                 )
+
+                for bar_x in range(
+                    bar_width
+                ):
+
+                    current_x = (
+                        x
+                        + bar_x
+                    )
+
+                    if (
+                        0
+                        <= current_x
+                        < width
+                    ):
+                        lines[y][
+                            current_x
+                        ] = character
 
     return [
         "".join(line)

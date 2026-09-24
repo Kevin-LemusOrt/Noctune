@@ -1,13 +1,18 @@
 import shutil
+import re
 import sys
 import textwrap
 
 from ui.audio.cava_backend import CavaBackend
-from ui.visualizers.cava import render as render_cava
+from ui.visualizers.cava import (
+    render as render_cava,
+    colorize as colorize_cava
+)
 
 
 _cava_backend = None
 _cava_width = None
+_ANSI_PATTERN = re.compile(r"\033\[[0-?]*[ -/]*[@-~]")
 
 
 # =============================================================
@@ -24,8 +29,8 @@ def render_current_lyric(
     """
     Renderiza la interfaz completa de Noctune.
 
-    La interfaz se adapta automáticamente al tamaño
-    actual de la terminal.
+    La interfaz se adapta al tamaño actual
+    de la terminal.
     """
 
     terminal_size = shutil.get_terminal_size(
@@ -36,10 +41,12 @@ def render_current_lyric(
     height = terminal_size.lines
 
     if width < 40 or height < 8:
+
         _draw_small_terminal(
             width,
             height
         )
+
         return
 
     frame = _build_frame(
@@ -52,7 +59,9 @@ def render_current_lyric(
         visualizer_mode=visualizer_mode
     )
 
-    _draw_frame(frame)
+    _draw_frame(
+        frame
+    )
 
 
 # =============================================================
@@ -90,10 +99,13 @@ def _build_frame(
     )
 
     if height > 1:
-        frame[1] = "─" * width
+
+        frame[1] = (
+            "─" * width
+        )
 
     # ---------------------------------------------------------
-    # VISUALIZER
+    # LAYOUT
     # ---------------------------------------------------------
 
     if visualizer_mode == "cava":
@@ -134,7 +146,7 @@ def _build_cava_layout(
     height
 ):
     """
-    Distribución:
+    Distribución actual:
 
         Header
         ──────
@@ -142,7 +154,7 @@ def _build_cava_layout(
         ──────
         Cava
 
-    La distribución vertical se mantiene igual.
+    La distribución vertical se conserva.
     """
 
     lyrics_start = 2
@@ -150,7 +162,7 @@ def _build_cava_layout(
     separator_height = 1
 
     # ---------------------------------------------------------
-    # DISTRIBUCIÓN VERTICAL ACTUAL
+    # DISTRIBUCIÓN VERTICAL
     # ---------------------------------------------------------
 
     visualizer_height = max(
@@ -207,7 +219,10 @@ def _build_cava_layout(
         lyrics_lines
     ):
 
-        row = lyrics_start + index
+        row = (
+            lyrics_start
+            + index
+        )
 
         if row >= separator_row:
             break
@@ -239,19 +254,24 @@ def _build_cava_layout(
         visualizer_height
     )
 
-    for index, line in enumerate(
-        cava_lines
-    ):
+    cava_lines = [
+        _fit_line(line, width)
+        for line in cava_lines[:visualizer_height]
+    ]
+
+    cava_lines = colorize_cava(
+        cava_lines,
+        width
+    )
+
+    for index, line in enumerate(cava_lines):
 
         row = visualizer_start + index
 
         if row >= height:
             break
 
-        frame[row] = _fit_line(
-            line,
-            width
-        )
+        frame[row] = line
 
 
 # =============================================================
@@ -277,6 +297,10 @@ def _build_lyrics(
 
     if height <= 0:
         return []
+
+    # ---------------------------------------------------------
+    # SIN LETRA
+    # ---------------------------------------------------------
 
     if not parsed_lyrics:
 
@@ -331,17 +355,18 @@ def _build_lyrics(
 
     lines = []
 
+    # ---------------------------------------------------------
+    # PROCESAR LETRAS
+    # ---------------------------------------------------------
+
     for index, (_, lyric) in enumerate(
         visible_lyrics
     ):
 
         real_index = (
-            start_index + index
+            start_index
+            + index
         )
-
-        # -----------------------------------------------------
-        # ANIMACIÓN DE LA LÍNEA ACTUAL
-        # -----------------------------------------------------
 
         if real_index == current_index:
 
@@ -351,10 +376,6 @@ def _build_lyrics(
                 current_index,
                 lyric
             )
-
-        # -----------------------------------------------------
-        # WRAP
-        # -----------------------------------------------------
 
         wrapped = textwrap.wrap(
             lyric,
@@ -467,12 +488,11 @@ def _animate_current_lyric(
 
 def _get_cava_backend(width):
     """
-    Obtiene el backend de Cava correspondiente
-    al ancho actual de la terminal.
+    Obtiene la instancia global de Cava.
 
-    Si la terminal cambia de tamaño, Cava se
-    reinicia automáticamente con el nuevo número
-    de barras.
+    La configuración de barras y framerate
+    ahora pertenece exclusivamente a CavaBackend,
+    que la obtiene desde ~/.config/cava/config.
     """
 
     global _cava_backend
@@ -482,35 +502,16 @@ def _get_cava_backend(width):
     # PRIMER INICIO
     # ---------------------------------------------------------
 
-    if _cava_backend is None:
+    if (
+        _cava_backend is None
+        or _cava_width != width
+    ):
+
+        if _cava_backend is not None:
+            _cava_backend.stop()
 
         _cava_backend = CavaBackend(
-            bars=max(1, width),
-            framerate=30
-        )
-
-        _cava_backend.start()
-
-        _cava_width = width
-
-        return _cava_backend
-
-    # ---------------------------------------------------------
-    # CAMBIO DE ANCHO
-    # ---------------------------------------------------------
-
-    if _cava_width != width:
-
-        # Detener Cava anterior.
-
-        _cava_backend.stop()
-
-        # Crear una instancia nueva con el
-        # ancho actualizado.
-
-        _cava_backend = CavaBackend(
-            bars=max(1, width),
-            framerate=30
+            bars=max(1, width)
         )
 
         _cava_backend.start()
@@ -525,8 +526,8 @@ def _render_cava(
     height
 ):
     """
-    Obtiene el último frame de Cava y lo
-    convierte en líneas para la terminal.
+    Obtiene el último frame disponible de Cava
+    y lo convierte en líneas.
     """
 
     if width <= 0 or height <= 0:
@@ -534,13 +535,11 @@ def _render_cava(
 
     try:
 
-        backend = _get_cava_backend(
-            width
-        )
+        backend = _get_cava_backend(width)
 
         bars = backend.read()
 
-        # Cava todavía no ha generado un frame.
+        # Todavía no existe un frame.
 
         if bars is None:
 
@@ -565,9 +564,13 @@ def _render_cava(
         ]
 
 
+# =============================================================
+# STOP VISUALIZER
+# =============================================================
+
 def stop_visualizer():
     """
-    Detiene Cava y libera todos sus recursos.
+    Detiene Cava y libera sus recursos.
     """
 
     global _cava_backend
@@ -586,7 +589,9 @@ def stop_visualizer():
 # FRAME DRAWING
 # =============================================================
 
-def _draw_frame(frame):
+def _draw_frame(
+    frame
+):
     """
     Dibuja el frame utilizando ANSI.
 
@@ -641,6 +646,7 @@ def _center_line(
     text = str(text)
 
     if len(text) > width:
+
         text = text[:width]
 
     padding = (
@@ -670,13 +676,46 @@ def _fit_line(
         return ""
 
     text = str(text)
+    visible_length = len(
+        _ANSI_PATTERN.sub("", text)
+    )
 
-    if len(text) > width:
-        return text[:width]
+    if visible_length > width:
+        result = []
+        visible_length = 0
 
-    return text + (
-        " " * (
-            width - len(text)
+        for token in re.split(
+            "(" + _ANSI_PATTERN.pattern + ")",
+            text
+        ):
+            if not token:
+                continue
+
+            if _ANSI_PATTERN.fullmatch(token):
+                result.append(token)
+                continue
+
+            remaining = width - visible_length
+
+            if remaining <= 0:
+                break
+
+            result.append(token[:remaining])
+            visible_length += min(
+                len(token),
+                remaining
+            )
+
+        return "".join(result)
+
+    return (
+        text
+        + (
+            " "
+            * (
+                width
+                - visible_length
+            )
         )
     )
 
@@ -695,10 +734,12 @@ def _center_vertical(
     lines = list(lines)
 
     if len(lines) >= height:
+
         return lines[-height:]
 
     remaining = (
-        height - len(lines)
+        height
+        - len(lines)
     )
 
     top = remaining // 2
@@ -752,6 +793,7 @@ def _draw_small_terminal(
         )
 
         if row == total_rows:
+
             output += message
 
     sys.stdout.write(
