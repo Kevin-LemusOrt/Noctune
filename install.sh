@@ -1,5 +1,8 @@
 #!/bin/bash
 
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$SCRIPT_DIR"
+
 echo ""
 echo "Installing Noctune..."
 echo ""
@@ -13,34 +16,36 @@ install_system_dependencies() {
             python3-venv \
             python3-pip \
             playerctl \
-            cava \
-            tmux
+            cava
+
     elif command -v dnf >/dev/null 2>&1; then
         echo "Detected DNF (Fedora)."
         sudo dnf install -y \
             python3 \
             python3-pip \
             playerctl \
-            cava \
-            tmux
+            cava
+
     elif command -v pacman >/dev/null 2>&1; then
         echo "Detected Pacman (Arch Linux)."
         sudo pacman -Sy --needed \
             python \
             python-pip \
             playerctl \
-            cava \
-            tmux
+            cava
+
     else
         echo "Unsupported package manager."
-        echo "Install Python 3, playerctl, cava and tmux manually."
+        echo "Install Python 3, playerctl and cava manually."
         exit 1
     fi
 }
 
 install_system_dependencies
 
-for command in python3 playerctl cava tmux; do
+cd -- "$PROJECT_DIR" || exit 1
+
+for command in python3 playerctl cava; do
     if ! command -v "$command" >/dev/null 2>&1; then
         echo "Error: '$command' was not found after installation."
         exit 1
@@ -51,53 +56,33 @@ echo ""
 echo "Preparing virtual environment..."
 echo ""
 
-if [ ! -d "venv" ]; then
-    python3 -m venv venv
+if [ ! -d "$PROJECT_DIR/venv" ]; then
+    python3 -m venv "$PROJECT_DIR/venv"
 fi
-
-source venv/bin/activate
 
 echo ""
 echo "Installing Python dependencies..."
 echo ""
 
-if [ -f "requirements.txt" ]; then
-    pip install -r requirements.txt
+if [ -f "$PROJECT_DIR/requirements.txt" ]; then
+    "$PROJECT_DIR/venv/bin/python" -m pip install -r "$PROJECT_DIR/requirements.txt"
 else
-    pip install requests rich
+    "$PROJECT_DIR/venv/bin/python" -m pip install requests rich
 fi
 
 echo ""
 echo "Creating global command..."
 echo ""
 
-mkdir -p ~/.local/bin
+mkdir -p "$HOME/.local/bin"
 
-PROJECT_DIR="$(pwd)"
-
-cat > ~/.local/bin/noctune <<EOF
+cat > "$HOME/.local/bin/noctune" <<EOF
 #!/bin/bash
 
-SESSION="noctune"
-
-if tmux has-session -t "\$SESSION" 2>/dev/null; then
-    tmux attach-session -t "\$SESSION"
-    exit 0
-fi
-
-tmux new-session -d -s "\$SESSION"
-
-tmux send-keys -t "\$SESSION" "cd $PROJECT_DIR && source venv/bin/activate && python main.py" C-m
-
-tmux split-window -v -t "\$SESSION"
-tmux send-keys -t "\$SESSION" "cava" C-m
-
-tmux select-pane -t 0
-
-tmux attach-session -t "\$SESSION"
+exec "$PROJECT_DIR/venv/bin/python" "$PROJECT_DIR/main.py"
 EOF
 
-chmod +x ~/.local/bin/noctune
+chmod +x "$HOME/.local/bin/noctune"
 
 echo ""
 echo "Configuring PATH..."
@@ -127,3 +112,4 @@ echo ""
 echo "Then launch with:"
 echo ""
 echo "noctune"
+echo ""

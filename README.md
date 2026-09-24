@@ -59,6 +59,11 @@ Ejecuta el instalador
 ./install.sh
 ```
 
+El instalador detecta automaticamente la ubicacion del proyecto a partir de
+`install.sh`, aunque se ejecute desde otro directorio. Genera el launcher en
+`~/.local/bin/noctune` y anade esa ruta al `PATH` de la configuracion de la
+shell seleccionada.
+
 Ejecute Noctune
 ```bash
 noctune
@@ -112,27 +117,21 @@ nano ~/.local/bin/noctune
 
 SESSION="noctune"
 
-if tmux has-session -t $SESSION 2>/dev/null; then
+if tmux has-session -t "\$SESSION" 2>/dev/null; then
+    tmux attach-session -t "\$SESSION"
+    exit 0
+fi
 
-    tmux attach-session -t $SESSION
+tmux new-session -d -s "\$SESSION"
 
-else
+tmux send-keys -t "\$SESSION" '"$PROJECT_DIR/venv/bin/python" "$PROJECT_DIR/main.py"' C-m
 
-    tmux new-session -d -s $SESSION
+tmux split-window -v -t "\$SESSION"
+tmux send-keys -t "\$SESSION" "cava" C-m
 
-    tmux send-keys -t $SESSION \
-    "cd ~/proyectos/SpotyTerminal && source venv/bin/activate && python main.py" C-m
+tmux select-pane -t 0
 
-    tmux split-window -v -t $SESSION
-
-    tmux send-keys -t $SESSION "cava" C-m
-
-    tmux select-pane -t 0
-
-    tmux set-option -t $SESSION remain-on-exit off
-
-    tmux attach-session -t $SESSION
-
+tmux attach-session -t "\$SESSION"
 ```
 
 ## PATH no configurado correctamente
