@@ -1,6 +1,11 @@
-import os
 import shutil
 import textwrap
+
+from ui.audio.cava_backend import CavaBackend
+from ui.visualizers.cava import render as render_cava
+
+
+_cava_backend = None
 
 
 def render_current_lyric(
@@ -18,13 +23,14 @@ def render_current_lyric(
     - distribución de la interfaz;
     - encabezado;
     - letras;
-    - espacio reservado para el visualizador.
+    - ubicación del visualizador.
 
-    Los visualizadores reales se integrarán posteriormente desde
-    ui/visualizers/.
+    Los visualizadores se encargan únicamente
+    de convertir datos en elementos visuales.
     """
 
     terminal_size = shutil.get_terminal_size()
+
     terminal_width = terminal_size.columns
     terminal_height = terminal_size.lines
 
@@ -40,13 +46,17 @@ def render_current_lyric(
     # HEADER
     # ---------------------------------------------------------
 
-    _render_header(song_data, terminal_width)
+    _render_header(
+        song_data,
+        terminal_width
+    )
 
     # ---------------------------------------------------------
     # LAYOUT
     # ---------------------------------------------------------
 
     if visualizer_mode == "cava":
+
         _render_cava_layout(
             current_time,
             parsed_lyrics,
@@ -56,6 +66,7 @@ def render_current_lyric(
         )
 
     elif visualizer_mode in ("vinyl", "circular"):
+
         _render_side_visualizer_layout(
             current_time,
             parsed_lyrics,
@@ -66,8 +77,10 @@ def render_current_lyric(
         )
 
     else:
-        # Si llega un modo desconocido, usamos Cava como
-        # comportamiento predeterminado.
+
+        # Si llega un modo desconocido,
+        # usamos Cava como predeterminado.
+
         _render_cava_layout(
             current_time,
             parsed_lyrics,
@@ -83,6 +96,7 @@ def render_current_lyric(
 
 def _clear_screen():
     """Limpia la terminal usando secuencias ANSI."""
+
     print("\033[2J\033[H", end="")
 
 
@@ -98,6 +112,53 @@ def _render_header(song_data, terminal_width):
 
 
 # =============================================================
+# CAVA BACKEND
+# =============================================================
+
+def _get_cava_backend(width):
+    """
+    Obtiene la instancia persistente de Cava.
+
+    Cava se inicia una sola vez y permanece activo
+    mientras Noctune está funcionando.
+    """
+
+    global _cava_backend
+
+    if _cava_backend is None:
+
+        bars = max(
+            8,
+            min(64, width // 2)
+        )
+
+        _cava_backend = CavaBackend(
+            bars=bars,
+            framerate=30
+        )
+
+        _cava_backend.start()
+
+    return _cava_backend
+
+
+def stop_visualizer():
+    """
+    Detiene el backend del visualizador.
+
+    Debe llamarse cuando Noctune termina.
+    """
+
+    global _cava_backend
+
+    if _cava_backend is not None:
+
+        _cava_backend.stop()
+
+        _cava_backend = None
+
+
+# =============================================================
 # CAVA LAYOUT
 # =============================================================
 
@@ -108,12 +169,40 @@ def _render_cava_layout(
     terminal_width,
     terminal_height
 ):
+    """
+    Distribución para el visualizador Cava.
 
-    # Reservamos aproximadamente el 30% inferior
-    # para el futuro visualizador.
-    visualizer_height = max(4, terminal_height // 3)
+    Layout:
 
-    lyrics_height = terminal_height - visualizer_height - 2
+    ┌──────────────────────────────┐
+    │          HEADER              │
+    ├──────────────────────────────┤
+    │                              │
+    │            LETRAS            │
+    │                              │
+    ├──────────────────────────────┤
+    │          VISUALIZADOR        │
+    │             CAVA             │
+    └──────────────────────────────┘
+    """
+
+    # Aproximadamente un tercio de la pantalla
+    # queda reservado para Cava.
+
+    visualizer_height = max(
+        4,
+        terminal_height // 3
+    )
+
+    lyrics_height = (
+        terminal_height
+        - visualizer_height
+        - 2
+    )
+
+    # ---------------------------------------------------------
+    # LYRICS
+    # ---------------------------------------------------------
 
     _render_lyrics(
         current_time,
@@ -123,13 +212,50 @@ def _render_cava_layout(
         lyrics_height
     )
 
+    # ---------------------------------------------------------
+    # SEPARATOR
+    # ---------------------------------------------------------
+
     print("─" * terminal_width)
 
-    _render_visualizer_placeholder(
+    # ---------------------------------------------------------
+    # VISUALIZER
+    # ---------------------------------------------------------
+
+    _render_cava_visualizer(
         terminal_width,
-        visualizer_height,
-        "cava"
+        visualizer_height
     )
+
+
+def _render_cava_visualizer(width, height):
+    """
+    Obtiene un frame del backend de Cava y lo convierte
+    en una visualización mediante ui.visualizers.cava.
+    """
+
+    try:
+
+        backend = _get_cava_backend(width)
+
+        bars = backend.read()
+
+        lines = render_cava(
+            bars,
+            width,
+            height
+        )
+
+        for line in lines:
+            print(line)
+
+    except Exception:
+
+        # Si Cava falla, mantenemos la interfaz funcionando
+        # en lugar de cerrar Noctune.
+
+        for _ in range(height):
+            print(" " * width)
 
 
 # =============================================================
@@ -144,11 +270,37 @@ def _render_side_visualizer_layout(
     terminal_height,
     visualizer_mode
 ):
+    """
+    Distribución para Vinyl y Circular.
 
-    # El visualizador ocupa aproximadamente un tercio.
-    visualizer_width = max(18, terminal_width // 3)
+    Layout:
 
-    lyrics_width = terminal_width - visualizer_width - 1
+    ┌──────────────────────┬───────────────────────┐
+    │                      │                       │
+    │     VISUALIZADOR     │        LETRAS         │
+    │                      │                       │
+    │          ◉           │      LÍNEA ACTUAL     │
+    │                      │                       │
+    └──────────────────────┴───────────────────────┘
+    """
+
+    # El visualizador ocupa aproximadamente un tercio
+    # del ancho disponible.
+
+    visualizer_width = max(
+        18,
+        terminal_width // 3
+    )
+
+    lyrics_width = (
+        terminal_width
+        - visualizer_width
+        - 1
+    )
+
+    # ---------------------------------------------------------
+    # VISUALIZER
+    # ---------------------------------------------------------
 
     _render_side_visualizer(
         visualizer_width,
@@ -156,7 +308,13 @@ def _render_side_visualizer_layout(
         visualizer_mode
     )
 
+    # Separador vertical.
+
     print("│", end="")
+
+    # ---------------------------------------------------------
+    # LYRICS
+    # ---------------------------------------------------------
 
     _render_lyrics(
         current_time,
@@ -183,37 +341,68 @@ def _render_lyrics(
     """
     Renderiza las letras sincronizadas.
 
-    Mantiene hasta dos líneas anteriores y nunca muestra
-    líneas futuras.
+    Mantiene hasta dos líneas anteriores
+    y nunca muestra líneas futuras.
     """
 
     if height <= 0:
         return
 
     if not parsed_lyrics:
+
         _render_waiting_message(
             current_time,
             width,
             height,
             inline
         )
+
         return
 
-    # Solo mostramos contexto anterior + línea actual.
-    start_index = max(0, current_index - 2)
-    end_index = min(len(parsed_lyrics), current_index + 1)
+    # ---------------------------------------------------------
+    # VISIBLE LYRICS
+    # ---------------------------------------------------------
 
-    visible_lyrics = parsed_lyrics[start_index:end_index]
+    # Mostramos:
+    #
+    # línea anterior
+    # línea anterior
+    # línea actual
+    #
+    # Nunca mostramos líneas futuras.
 
-    # Calcula el espacio vertical disponible.
+    start_index = max(
+        0,
+        current_index - 2
+    )
+
+    end_index = min(
+        len(parsed_lyrics),
+        current_index + 1
+    )
+
+    visible_lyrics = parsed_lyrics[
+        start_index:end_index
+    ]
+
+    # ---------------------------------------------------------
+    # WRAPPING
+    # ---------------------------------------------------------
+
     total_lines = 0
 
     wrapped_lines = []
 
-    for index, (_, lyric) in enumerate(visible_lyrics):
+    for index, (_, lyric) in enumerate(
+        visible_lyrics
+    ):
+
         real_index = start_index + index
 
+        # Animación únicamente para la línea actual.
+
         if real_index == current_index:
+
             lyric = _animate_current_lyric(
                 current_time,
                 parsed_lyrics,
@@ -229,32 +418,51 @@ def _render_lyrics(
         if not lines:
             lines = [""]
 
-        wrapped_lines.append((real_index, lines))
+        wrapped_lines.append(
+            (real_index, lines)
+        )
+
         total_lines += len(lines)
 
-    top_padding = max(0, (height - total_lines) // 2)
+    # ---------------------------------------------------------
+    # VERTICAL CENTERING
+    # ---------------------------------------------------------
+
+    top_padding = max(
+        0,
+        (height - total_lines) // 2
+    )
 
     if not inline:
+
         for _ in range(top_padding):
             print()
 
     else:
-        # En layout lateral el padding se imprime dentro del panel.
-        for _ in range(top_padding):
-            print(" " * width + "│")
 
+        for _ in range(top_padding):
+            print(
+                " " * width + "│"
+            )
+
+    # ---------------------------------------------------------
+    # DRAW LYRICS
+    # ---------------------------------------------------------
 
     for real_index, lines in wrapped_lines:
+
         for line in lines:
 
-            if real_index == current_index:
-                rendered_line = line.center(width)
-            else:
-                rendered_line = line.center(width)
+            rendered_line = line.center(width)
 
             if inline:
-                print(rendered_line + "│")
+
+                print(
+                    rendered_line + "│"
+                )
+
             else:
+
                 print(rendered_line)
 
 
@@ -268,37 +476,66 @@ def _animate_current_lyric(
     current_index,
     lyric
 ):
-    """Calcula la cantidad de caracteres visibles de la línea actual."""
+    """
+    Calcula la cantidad de caracteres visibles
+    de la línea actual.
+    """
 
-    timestamp = parsed_lyrics[current_index][0]
+    timestamp = parsed_lyrics[
+        current_index
+    ][0]
 
     elapsed = current_time - timestamp
 
     if elapsed < 0:
         elapsed = 0
 
-    # Duración estimada hasta la siguiente línea.
+    # ---------------------------------------------------------
+    # LINE DURATION
+    # ---------------------------------------------------------
+
     if current_index + 1 < len(parsed_lyrics):
-        next_timestamp = parsed_lyrics[current_index + 1][0]
+
+        next_timestamp = parsed_lyrics[
+            current_index + 1
+        ][0]
+
     else:
+
         next_timestamp = timestamp + 5
 
-    line_duration = next_timestamp - timestamp
+    line_duration = (
+        next_timestamp
+        - timestamp
+    )
 
     if line_duration <= 0:
         line_duration = 1
 
-    characters_per_second = len(lyric) / line_duration
+    # ---------------------------------------------------------
+    # CHARACTERS PER SECOND
+    # ---------------------------------------------------------
 
-    # Límites para evitar animaciones demasiado lentas
+    characters_per_second = (
+        len(lyric)
+        / line_duration
+    )
+
+    # Evitamos animaciones demasiado lentas
     # o demasiado rápidas.
+
     characters_per_second = max(
         8,
         min(22, characters_per_second)
     )
 
+    # ---------------------------------------------------------
+    # VISIBLE CHARACTERS
+    # ---------------------------------------------------------
+
     visible_characters = int(
-        elapsed * characters_per_second
+        elapsed
+        * characters_per_second
     )
 
     visible_characters = min(
@@ -306,7 +543,9 @@ def _animate_current_lyric(
         len(lyric)
     )
 
-    return lyric[:visible_characters]
+    return lyric[
+        :visible_characters
+    ]
 
 
 # =============================================================
@@ -321,9 +560,14 @@ def _render_waiting_message(
 ):
     """Muestra un mensaje mientras no existen letras."""
 
-    dots = int(current_time % 4)
+    dots = int(
+        current_time % 4
+    )
 
-    waiting_text = "No lyrics found" + ("." * dots)
+    waiting_text = (
+        "No lyrics found"
+        + ("." * dots)
+    )
 
     top_padding = max(
         0,
@@ -331,49 +575,26 @@ def _render_waiting_message(
     )
 
     if inline:
-        for _ in range(top_padding):
-            print(" " * width + "│")
 
-        print(waiting_text.center(width) + "│")
+        for _ in range(top_padding):
+
+            print(
+                " " * width + "│"
+            )
+
+        print(
+            waiting_text.center(width)
+            + "│"
+        )
 
     else:
+
         for _ in range(top_padding):
             print()
 
-        print(waiting_text.center(width))
-
-
-# =============================================================
-# VISUALIZER PLACEHOLDER
-# =============================================================
-
-def _render_visualizer_placeholder(
-    width,
-    height,
-    visualizer_mode
-):
-    """
-    Reserva el área del visualizador.
-
-    Actualmente solo representa el espacio que ocupará
-    el visualizador real.
-
-    Posteriormente esta función será reemplazada por llamadas
-    a ui.visualizers.cava, ui.visualizers.circular y
-    ui.visualizers.vinyl.
-    """
-
-    label = f"[ {visualizer_mode.upper()} ]"
-
-    top_padding = max(
-        0,
-        (height - 1) // 2
-    )
-
-    for _ in range(top_padding):
-        print()
-
-    print(label.center(width))
+        print(
+            waiting_text.center(width)
+        )
 
 
 # =============================================================
@@ -386,13 +607,14 @@ def _render_side_visualizer(
     visualizer_mode
 ):
     """
-    Reserva el área lateral del visualizador.
+    Reserva temporalmente el área lateral.
 
-    Posteriormente será reemplazada por el visualizador
-    correspondiente.
+    Vinyl y Circular todavía no están conectados.
     """
 
-    label = f"[ {visualizer_mode.upper()} ]"
+    label = (
+        f"[ {visualizer_mode.upper()} ]"
+    )
 
     top_padding = max(
         0,
@@ -402,6 +624,15 @@ def _render_side_visualizer(
     for row in range(height):
 
         if row == top_padding:
-            print(label.center(width), end="")
+
+            print(
+                label.center(width),
+                end=""
+            )
+
         else:
-            print(" " * width, end="")
+
+            print(
+                " " * width,
+                end=""
+            )

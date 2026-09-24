@@ -88,27 +88,91 @@ echo ""
 echo "Configuring PATH..."
 echo ""
 
-SHELL_NAME=$(basename "$SHELL")
+SHELL_NAME=$(basename "${SHELL:-}")
 
-if [ "$SHELL_NAME" = "zsh" ]; then
-    SHELL_RC="$HOME/.zshrc"
-elif [ "$SHELL_NAME" = "bash" ]; then
-    SHELL_RC="$HOME/.bashrc"
-else
-    SHELL_RC="$HOME/.profile"
+if [ -z "$SHELL_NAME" ]; then
+    SHELL_NAME="unknown"
 fi
 
-if ! grep -q '.local/bin' "$SHELL_RC"; then
-    echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$SHELL_RC"
-fi
+case "$SHELL_NAME" in
+
+    fish)
+        SHELL_RC="$HOME/.config/fish/config.fish"
+
+        mkdir -p "$(dirname "$SHELL_RC")"
+
+        if ! grep -Fq 'fish_add_path ~/.local/bin' "$SHELL_RC" 2>/dev/null; then
+            echo 'fish_add_path ~/.local/bin' >> "$SHELL_RC"
+        fi
+        ;;
+
+    bash)
+        SHELL_RC="$HOME/.bashrc"
+
+        touch "$SHELL_RC"
+
+        if ! grep -Fq '.local/bin' "$SHELL_RC"; then
+            echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$SHELL_RC"
+        fi
+        ;;
+
+    zsh)
+        SHELL_RC="$HOME/.zshrc"
+
+        touch "$SHELL_RC"
+
+        if ! grep -Fq '.local/bin' "$SHELL_RC"; then
+            echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$SHELL_RC"
+        fi
+        ;;
+
+    sh|dash|ksh|mksh)
+        SHELL_RC="$HOME/.profile"
+
+        touch "$SHELL_RC"
+
+        if ! grep -Fq '.local/bin' "$SHELL_RC"; then
+            echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$SHELL_RC"
+        fi
+        ;;
+
+    csh|tcsh)
+        SHELL_RC="$HOME/.cshrc"
+
+        touch "$SHELL_RC"
+
+        if ! grep -Fq '.local/bin' "$SHELL_RC"; then
+            echo 'set path = ( $HOME/.local/bin $path )' >> "$SHELL_RC"
+        fi
+        ;;
+
+    *)
+        echo "Warning: unsupported shell '$SHELL_NAME'."
+        echo ""
+        echo "Noctune was installed successfully, but its PATH"
+        echo "could not be configured automatically."
+        echo ""
+        echo "Add the following directory to your PATH:"
+        echo "$HOME/.local/bin"
+        SHELL_RC=""
+        ;;
+
+esac
 
 echo ""
 echo "Installation complete!"
 echo ""
-echo "Restart your terminal or run:"
-echo ""
-echo "source $SHELL_RC"
-echo ""
+
+if [ -n "$SHELL_RC" ]; then
+    echo "Detected shell: $SHELL_NAME"
+    echo "Configuration: $SHELL_RC"
+    echo ""
+    echo "Restart your terminal or run:"
+    echo ""
+    echo "source $SHELL_RC"
+    echo ""
+fi
+
 echo "Then launch with:"
 echo ""
 echo "noctune"
