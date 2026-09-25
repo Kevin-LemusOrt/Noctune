@@ -1,101 +1,189 @@
+import sys
+import time
+
 from spotify.player import get_current_song
 from spotify.player import get_current_time
 from spotify.sync import should_reset_lyrics
+
 from lyrics.fetcher import get_synced_lyrics
 from lyrics.parser import parse_lyrics
-from ui.renderer import render_current_lyric, stop_visualizer
 
-import time
+from ui.renderer import (
+    render_current_lyric,
+    stop_visualizer
+)
 
 
-# Guarda la canción anterior para solicitar letras solo cuando esta cambia.
+# =============================================================
+# VISUALIZER MODE
+# =============================================================
+
+visualizer_mode = "cava"
+
+if "-c" in sys.argv or "--circle" in sys.argv:
+    visualizer_mode = "circle"
+
+
+# =============================================================
+# STATE
+# =============================================================
+
 last_song = ""
 
-# Contiene las líneas como tuplas: (segundo de inicio, texto).
 parsed_lyrics = []
 
-# Indica el índice de la línea que debe mostrarse como activa.
 show_index = 0
 
-# Conserva la posición previa para detectar retrocesos de reproducción.
 last_time = 0
 
 
-# Bucle principal: consulta el reproductor y actualiza la interfaz.
+# =============================================================
+# MAIN LOOP
+# =============================================================
+
 try:
+
     while True:
+
         try:
-            # Obtiene la canción actual con el formato "artista - título".
+
+            # -------------------------------------------------
+            # CURRENT SONG
+            # -------------------------------------------------
+
             song_data = get_current_song()
 
-            # Descarga letras nuevas solo si cambió la canción.
             if song_data != last_song:
-                # Separa los datos necesarios para buscar la letra en LRCLIB.
-                parts = song_data.split(" - ")
-                artist = parts[0]
-                song = parts[1]
 
-                # Solicita la versión LRC, que incluye las marcas de tiempo.
-                synced_lyrics = get_synced_lyrics(artist, song)
+                parts = song_data.split(
+                    " - ",
+                    1
+                )
 
-                # Una respuesta sin letra conserva una lista vacía para el renderizador.
-                if synced_lyrics is None:
-                    parsed_lyrics = []
+                if len(parts) == 2:
+
+                    artist = parts[0]
+
+                    song = parts[1]
+
                 else:
-                    # Convierte el texto LRC a marcas de tiempo en segundos.
-                    parsed_lyrics = parse_lyrics(synced_lyrics)
 
-                # La nueva canción inicia mostrando la primera línea disponible.
+                    artist = ""
+
+                    song = song_data
+
+                # ---------------------------------------------
+                # FETCH LYRICS
+                # ---------------------------------------------
+
+                synced_lyrics = get_synced_lyrics(
+                    artist,
+                    song
+                )
+
+                if synced_lyrics is None:
+
+                    parsed_lyrics = []
+
+                else:
+
+                    parsed_lyrics = parse_lyrics(
+                        synced_lyrics
+                    )
+
                 show_index = 0
+
                 last_song = song_data
 
-            # Lee la posición actual del reproductor en segundos.
+            # -------------------------------------------------
+            # CURRENT TIME
+            # -------------------------------------------------
+
             current_time = get_current_time()
 
-            # Reinicia el índice si el usuario retrocedió en la canción.
-            if should_reset_lyrics(current_time, last_time):
+            # -------------------------------------------------
+            # RESET LYRICS
+            # -------------------------------------------------
+
+            if should_reset_lyrics(
+                current_time,
+                last_time
+            ):
+
                 show_index = 0
 
-            # Selecciona la última línea cuyo tiempo de inicio ya fue alcanzado.
-            for index, (timestamp, lyric) in enumerate(parsed_lyrics):
+            # -------------------------------------------------
+            # FIND CURRENT LYRIC
+            # -------------------------------------------------
+
+            for index, (
+                timestamp,
+                lyric
+            ) in enumerate(
+                parsed_lyrics
+            ):
+
                 if current_time >= timestamp:
+
                     show_index = index
 
-            # Redibuja la interfaz con el progreso y letra actuales.
+            # -------------------------------------------------
+            # RENDER
+            # -------------------------------------------------
+
             render_current_lyric(
                 current_time,
                 parsed_lyrics,
                 show_index,
-                song_data
+                song_data,
+                visualizer_mode=visualizer_mode
             )
 
-            # Actualiza la referencia temporal para la siguiente iteración.
+            # -------------------------------------------------
+            # SAVE TIME
+            # -------------------------------------------------
+
             last_time = current_time
 
-            # Limita la actualización a unas 33 imágenes por segundo.
-            time.sleep(0.03)
+            time.sleep(
+                0.03
+            )
+
+        # =====================================================
+        # KEYBOARD INTERRUPT
+        # =====================================================
 
         except KeyboardInterrupt:
-            # Ctrl+C se maneja en el bloque exterior.
+
             raise
 
+        # =====================================================
+        # RUNTIME ERROR
+        # =====================================================
+
         except Exception:
-            # Muestra un estado de espera si no hay reproductor,
-            # red o letra disponible.
+
             render_current_lyric(
                 0,
                 [],
                 0,
-                "Esperando canción o Spotify"
+                "Esperando canción o Spotify",
+                visualizer_mode=visualizer_mode
             )
 
-            # Evita reintentos agresivos mientras persista el error.
-            time.sleep(1)
+            time.sleep(
+                1
+            )
+
+
+# =============================================================
+# EXIT
+# =============================================================
 
 except KeyboardInterrupt:
-    # Detiene el visualizador y limpia los recursos antes de salir.
+
     stop_visualizer()
 
 finally:
-    # Garantiza que Cava se detenga incluso si ocurre otro tipo de salida.
+
     stop_visualizer()

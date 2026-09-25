@@ -10,9 +10,13 @@ from ui.visualizers.cava import (
     colorize as colorize_cava
 )
 
+from ui.visualizers.circular import CircularVisualizer
+
 
 _cava_backend = None
 _cava_width = None
+
+_circular_visualizer = None
 
 _ANSI_PATTERN = re.compile(
     r"\033\[[0-?]*[ -/]*[@-~]"
@@ -45,10 +49,12 @@ def render_current_lyric(
     height = terminal_size.lines
 
     if width < 40 or height < 8:
+
         _draw_small_terminal(
             width,
             height
         )
+
         return
 
     frame = _build_frame(
@@ -107,8 +113,9 @@ def _build_frame(
     # LAYOUT
     # ---------------------------------------------------------
 
-    if visualizer_mode == "cava":
-        _build_cava_layout(
+    if visualizer_mode == "circle":
+
+        _build_circular_layout(
             frame,
             current_time,
             parsed_lyrics,
@@ -116,7 +123,9 @@ def _build_frame(
             width,
             height
         )
+
     else:
+
         _build_cava_layout(
             frame,
             current_time,
@@ -142,15 +151,13 @@ def _build_cava_layout(
     height
 ):
     """
-    Distribución actual:
+    Distribución:
 
         Header
         ──────
         Letras
         ──────
         Cava
-
-    La distribución vertical se conserva.
     """
 
     lyrics_start = 2
@@ -173,7 +180,9 @@ def _build_cava_layout(
     )
 
     if lyrics_height < 3:
+
         lyrics_height = 3
+
         visualizer_height = (
             height
             - 2
@@ -211,6 +220,7 @@ def _build_cava_layout(
     for index, line in enumerate(
         lyrics_lines
     ):
+
         row = (
             lyrics_start
             + index
@@ -232,6 +242,7 @@ def _build_cava_layout(
     # ---------------------------------------------------------
 
     if separator_row < height:
+
         frame[separator_row] = (
             "─" * width
         )
@@ -246,8 +257,13 @@ def _build_cava_layout(
     )
 
     cava_lines = [
-        _fit_line(line, width)
-        for line in cava_lines[:visualizer_height]
+        _fit_line(
+            line,
+            width
+        )
+        for line in cava_lines[
+            :visualizer_height
+        ]
     ]
 
     cava_lines = colorize_cava(
@@ -255,13 +271,183 @@ def _build_cava_layout(
         width
     )
 
-    for index, line in enumerate(cava_lines):
-        row = visualizer_start + index
+    for index, line in enumerate(
+        cava_lines
+    ):
+
+        row = (
+            visualizer_start
+            + index
+        )
 
         if row >= height:
             break
 
         frame[row] = line
+
+
+# =============================================================
+# CIRCULAR LAYOUT
+# =============================================================
+
+def _build_circular_layout(
+    frame,
+    current_time,
+    parsed_lyrics,
+    current_index,
+    width,
+    height
+):
+    """
+    Distribución del modo circular:
+
+        Header
+        ──────────────────────────────
+        Circular    Letras
+
+    El circular ocupa la zona izquierda y
+    las letras la zona derecha.
+
+    No existe línea divisora entre ambos.
+    """
+
+    content_start = 2
+
+    content_height = (
+        height
+        - content_start
+    )
+
+    if content_height <= 0:
+        return
+
+    # ---------------------------------------------------------
+    # DISTRIBUCIÓN HORIZONTAL
+    # ---------------------------------------------------------
+
+    # El círculo ocupa aproximadamente el 30%
+    # de la terminal.
+    circular_width = max(
+        20,
+        int(width * 0.26)
+    )
+
+    # Nunca permitir que el círculo ocupe
+    # más de la mitad.
+    circular_width = min(
+        circular_width,
+        width // 2
+    )
+
+    # Las letras empiezan inmediatamente después
+    # del panel circular.
+    lyrics_width = (
+        width
+        - circular_width
+    )
+
+    # Protección para terminales pequeñas.
+    if lyrics_width < 10:
+
+        lyrics_width = 10
+
+        circular_width = max(
+            1,
+            width - lyrics_width
+        )
+
+    # ---------------------------------------------------------
+    # RENDER CIRCULAR
+    # ---------------------------------------------------------
+
+    circular_lines = _render_circular(
+        circular_width,
+        content_height
+    )
+
+    # ---------------------------------------------------------
+    # RENDER LETRAS
+    # ---------------------------------------------------------
+
+    lyrics_lines = _build_lyrics(
+        current_time,
+        parsed_lyrics,
+        current_index,
+        lyrics_width,
+        content_height
+    )
+
+    # ---------------------------------------------------------
+    # CONSTRUIR PANELES
+    # ---------------------------------------------------------
+
+    for index in range(
+        content_height
+    ):
+
+        row = (
+            content_start
+            + index
+        )
+
+        if row >= height:
+            break
+
+        # =====================================================
+        # PANEL CIRCULAR
+        # =====================================================
+
+        if index < len(
+            circular_lines
+        ):
+
+            circular_line = (
+                circular_lines[index]
+            )
+
+        else:
+
+            circular_line = ""
+
+        circular_line = _fit_line(
+            circular_line,
+            circular_width
+        )
+
+        # =====================================================
+        # PANEL DE LETRAS
+        # =====================================================
+
+        if index < len(
+            lyrics_lines
+        ):
+
+            lyric_line = (
+                lyrics_lines[index]
+            )
+
+        else:
+
+            lyric_line = ""
+
+        lyric_line = _fit_line(
+            lyric_line,
+            lyrics_width
+        )
+
+        # =====================================================
+        # UNIR PANELES
+        # =====================================================
+
+        frame[row] = (
+            circular_line
+            + lyric_line
+        )
+
+        frame[row] = _fit_line(
+            frame[row],
+            width
+        )
 
 
 # =============================================================
@@ -293,6 +479,7 @@ def _build_lyrics(
     # ---------------------------------------------------------
 
     if not parsed_lyrics:
+
         dots = int(
             current_time % 4
         )
@@ -348,15 +535,20 @@ def _build_lyrics(
     # PROCESAR LETRAS
     # ---------------------------------------------------------
 
-    for index, (_, lyric) in enumerate(
+    for index, (
+        _,
+        lyric
+    ) in enumerate(
         visible_lyrics
     ):
+
         real_index = (
             start_index
             + index
         )
 
         if real_index == current_index:
+
             lyric = _animate_current_lyric(
                 current_time,
                 parsed_lyrics,
@@ -376,6 +568,7 @@ def _build_lyrics(
             wrapped = [""]
 
         for line in wrapped:
+
             lines.append(
                 _center_line(
                     line,
@@ -418,10 +611,13 @@ def _animate_current_lyric(
     if current_index + 1 < len(
         parsed_lyrics
     ):
+
         next_timestamp = parsed_lyrics[
             current_index + 1
         ][0]
+
     else:
+
         next_timestamp = (
             timestamp + 5
         )
@@ -469,34 +665,33 @@ def _animate_current_lyric(
 # CAVA BACKEND
 # =============================================================
 
-def _get_cava_backend(width):
+def _get_cava_backend(
+    width
+):
     """
     Obtiene la instancia global de Cava.
-
-    La configuración de barras y framerate
-    pertenece exclusivamente a CavaBackend,
-    que la obtiene desde ~/.config/cava/config.
     """
 
     global _cava_backend
     global _cava_width
 
-    # ---------------------------------------------------------
-    # PRIMER INICIO
-    # ---------------------------------------------------------
-
     if (
         _cava_backend is None
         or _cava_width != width
     ):
+
         if _cava_backend is not None:
             _cava_backend.stop()
 
         _cava_backend = CavaBackend(
-            bars=max(1, width)
+            bars=max(
+                1,
+                width
+            )
         )
 
         _cava_backend.start()
+
         _cava_width = width
 
     return _cava_backend
@@ -507,20 +702,22 @@ def _render_cava(
     height
 ):
     """
-    Obtiene el último frame disponible de Cava
-    y lo convierte en líneas.
+    Obtiene el último frame disponible de Cava.
     """
 
     if width <= 0 or height <= 0:
         return []
 
     try:
-        backend = _get_cava_backend(width)
+
+        backend = _get_cava_backend(
+            width
+        )
 
         bars = backend.read()
 
-        # Todavía no existe un frame.
         if bars is None:
+
             return [
                 " " * width
                 for _ in range(height)
@@ -532,9 +729,74 @@ def _render_cava(
             height
         )
 
-        return lines[:height]
+        return lines[
+            :height
+        ]
 
     except Exception:
+
+        return [
+            " " * width
+            for _ in range(height)
+        ]
+
+
+# =============================================================
+# CIRCULAR VISUALIZER
+# =============================================================
+
+def _get_circular_visualizer():
+
+    global _circular_visualizer
+
+    if _circular_visualizer is None:
+
+        _circular_visualizer = (
+            CircularVisualizer()
+        )
+
+    return _circular_visualizer
+
+
+def _render_circular(
+    width,
+    height
+):
+    """
+    Obtiene los datos de Cava y los entrega
+    al visualizador circular.
+    """
+
+    if width <= 0 or height <= 0:
+        return []
+
+    try:
+
+        backend = _get_cava_backend(
+            width
+        )
+
+        bars = backend.read()
+
+        if bars is None:
+
+            return [
+                " " * width
+                for _ in range(height)
+            ]
+
+        visualizer = (
+            _get_circular_visualizer()
+        )
+
+        return visualizer.render(
+            bars,
+            width,
+            height
+        )
+
+    except Exception:
+
         return [
             " " * width
             for _ in range(height)
@@ -546,27 +808,20 @@ def _render_cava(
 # =============================================================
 
 def stop_visualizer():
-    """
-    Detiene Cava, libera sus recursos
-    y limpia la interfaz de Noctune.
-    """
 
     global _cava_backend
     global _cava_width
-
-    # ---------------------------------------------------------
-    # DETENER CAVA
-    # ---------------------------------------------------------
+    global _circular_visualizer
 
     if _cava_backend is not None:
+
         _cava_backend.stop()
+
         _cava_backend = None
 
     _cava_width = None
 
-    # ---------------------------------------------------------
-    # LIMPIAR TERMINAL
-    # ---------------------------------------------------------
+    _circular_visualizer = None
 
     sys.stdout.write(
         "\033[0m"
@@ -600,6 +855,7 @@ def _draw_frame(
         frame,
         start=1
     ):
+
         output.append(
             f"\033[{row};1H"
         )
@@ -628,7 +884,7 @@ def _center_line(
     width
 ):
     """
-    Centra horizontalmente un texto.
+    Centra un texto horizontalmente.
     """
 
     if width <= 0:
@@ -640,11 +896,16 @@ def _center_line(
         text = text[:width]
 
     padding = (
-        width - len(text)
+        width
+        - len(text)
     )
 
     left = padding // 2
-    right = padding - left
+
+    right = (
+        padding
+        - left
+    )
 
     return (
         (" " * left)
@@ -659,7 +920,9 @@ def _fit_line(
 ):
     """
     Garantiza que una línea tenga exactamente
-    el ancho de la terminal.
+    el ancho solicitado.
+
+    Conserva las secuencias ANSI.
     """
 
     if width <= 0:
@@ -668,22 +931,36 @@ def _fit_line(
     text = str(text)
 
     visible_length = len(
-        _ANSI_PATTERN.sub("", text)
+        _ANSI_PATTERN.sub(
+            "",
+            text
+        )
     )
 
     if visible_length > width:
+
         result = []
+
         visible_length = 0
 
         for token in re.split(
-            "(" + _ANSI_PATTERN.pattern + ")",
+            "("
+            + _ANSI_PATTERN.pattern
+            + ")",
             text
         ):
+
             if not token:
                 continue
 
-            if _ANSI_PATTERN.fullmatch(token):
-                result.append(token)
+            if _ANSI_PATTERN.fullmatch(
+                token
+            ):
+
+                result.append(
+                    token
+                )
+
                 continue
 
             remaining = (
@@ -703,7 +980,9 @@ def _fit_line(
                 remaining
             )
 
-        return "".join(result)
+        return "".join(
+            result
+        )
 
     return (
         text
@@ -731,7 +1010,10 @@ def _center_vertical(
     lines = list(lines)
 
     if len(lines) >= height:
-        return lines[-height:]
+
+        return lines[
+            -height:
+        ]
 
     remaining = (
         height
@@ -739,7 +1021,11 @@ def _center_vertical(
     )
 
     top = remaining // 2
-    bottom = remaining - top
+
+    bottom = (
+        remaining
+        - top
+    )
 
     return (
         ([""] * top)
@@ -767,6 +1053,7 @@ def _draw_small_terminal(
     )
 
     if width > 0:
+
         message = _center_line(
             message,
             width
@@ -781,6 +1068,7 @@ def _draw_small_terminal(
         1,
         total_rows + 1
     ):
+
         output += (
             f"\033[{row};1H"
             "\033[2K"
@@ -792,3 +1080,5 @@ def _draw_small_terminal(
     sys.stdout.write(
         output
     )
+
+    sys.stdout.flush()
