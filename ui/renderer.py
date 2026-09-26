@@ -48,8 +48,7 @@ def render_current_lyric(
     width = terminal_size.columns
     height = terminal_size.lines
 
-    if width < 40 or height < 8:
-
+    if width < 32 or height < 8:
         _draw_small_terminal(
             width,
             height
@@ -114,7 +113,6 @@ def _build_frame(
     # ---------------------------------------------------------
 
     if visualizer_mode == "circle":
-
         _build_circular_layout(
             frame,
             current_time,
@@ -125,7 +123,6 @@ def _build_frame(
         )
 
     else:
-
         _build_cava_layout(
             frame,
             current_time,
@@ -180,7 +177,6 @@ def _build_cava_layout(
     )
 
     if lyrics_height < 3:
-
         lyrics_height = 3
 
         visualizer_height = (
@@ -220,7 +216,6 @@ def _build_cava_layout(
     for index, line in enumerate(
         lyrics_lines
     ):
-
         row = (
             lyrics_start
             + index
@@ -242,7 +237,6 @@ def _build_cava_layout(
     # ---------------------------------------------------------
 
     if separator_row < height:
-
         frame[separator_row] = (
             "─" * width
         )
@@ -266,6 +260,7 @@ def _build_cava_layout(
         ]
     ]
 
+    # El color se aplica aquí una sola vez.
     cava_lines = colorize_cava(
         cava_lines,
         width
@@ -274,7 +269,6 @@ def _build_cava_layout(
     for index, line in enumerate(
         cava_lines
     ):
-
         row = (
             visualizer_start
             + index
@@ -325,31 +319,46 @@ def _build_circular_layout(
     # DISTRIBUCIÓN HORIZONTAL
     # ---------------------------------------------------------
 
-    # El círculo ocupa aproximadamente el 30%
+    # El círculo ocupa aproximadamente el 45%
     # de la terminal.
+    #
+    # En terminales grandes puede crecer hasta el 55%.
+    # En terminales pequeñas se le da más espacio
+    # para que el círculo conserve una presencia mayor.
+
     circular_width = max(
-        20,
-        int(width * 0.26)
+        24,
+        int(width * 0.45)
     )
 
-    # Nunca permitir que el círculo ocupe
-    # más de la mitad.
     circular_width = min(
         circular_width,
-        width // 2
+        int(width * 0.55)
     )
 
-    # Las letras empiezan inmediatamente después
-    # del panel circular.
+    # ---------------------------------------------------------
+    # VENTANA PEQUEÑA
+    # ---------------------------------------------------------
+
+    if width < 70:
+        circular_width = max(
+            24,
+            int(width * 0.65)
+        )
+
+    circular_width = min(
+        circular_width,
+        width
+    )
+
     lyrics_width = (
         width
         - circular_width
     )
 
     # Protección para terminales pequeñas.
-    if lyrics_width < 10:
-
-        lyrics_width = 10
+    if lyrics_width < 18:
+        lyrics_width = 18
 
         circular_width = max(
             1,
@@ -384,7 +393,6 @@ def _build_circular_layout(
     for index in range(
         content_height
     ):
-
         row = (
             content_start
             + index
@@ -400,13 +408,11 @@ def _build_circular_layout(
         if index < len(
             circular_lines
         ):
-
             circular_line = (
                 circular_lines[index]
             )
 
         else:
-
             circular_line = ""
 
         circular_line = _fit_line(
@@ -421,13 +427,11 @@ def _build_circular_layout(
         if index < len(
             lyrics_lines
         ):
-
             lyric_line = (
                 lyrics_lines[index]
             )
 
         else:
-
             lyric_line = ""
 
         lyric_line = _fit_line(
@@ -479,7 +483,6 @@ def _build_lyrics(
     # ---------------------------------------------------------
 
     if not parsed_lyrics:
-
         dots = int(
             current_time % 4
         )
@@ -541,14 +544,12 @@ def _build_lyrics(
     ) in enumerate(
         visible_lyrics
     ):
-
         real_index = (
             start_index
             + index
         )
 
         if real_index == current_index:
-
             lyric = _animate_current_lyric(
                 current_time,
                 parsed_lyrics,
@@ -568,7 +569,6 @@ def _build_lyrics(
             wrapped = [""]
 
         for line in wrapped:
-
             lines.append(
                 _center_line(
                     line,
@@ -611,13 +611,11 @@ def _animate_current_lyric(
     if current_index + 1 < len(
         parsed_lyrics
     ):
-
         next_timestamp = parsed_lyrics[
             current_index + 1
         ][0]
 
     else:
-
         next_timestamp = (
             timestamp + 5
         )
@@ -679,7 +677,6 @@ def _get_cava_backend(
         _cava_backend is None
         or _cava_width != width
     ):
-
         if _cava_backend is not None:
             _cava_backend.stop()
 
@@ -703,13 +700,15 @@ def _render_cava(
 ):
     """
     Obtiene el último frame disponible de Cava.
+
+    El color se aplica posteriormente en
+    _build_cava_layout().
     """
 
     if width <= 0 or height <= 0:
         return []
 
     try:
-
         backend = _get_cava_backend(
             width
         )
@@ -717,7 +716,6 @@ def _render_cava(
         bars = backend.read()
 
         if bars is None:
-
             return [
                 " " * width
                 for _ in range(height)
@@ -734,7 +732,6 @@ def _render_cava(
         ]
 
     except Exception:
-
         return [
             " " * width
             for _ in range(height)
@@ -746,11 +743,9 @@ def _render_cava(
 # =============================================================
 
 def _get_circular_visualizer():
-
     global _circular_visualizer
 
     if _circular_visualizer is None:
-
         _circular_visualizer = (
             CircularVisualizer()
         )
@@ -771,7 +766,6 @@ def _render_circular(
         return []
 
     try:
-
         backend = _get_cava_backend(
             width
         )
@@ -779,7 +773,6 @@ def _render_circular(
         bars = backend.read()
 
         if bars is None:
-
             return [
                 " " * width
                 for _ in range(height)
@@ -796,7 +789,6 @@ def _render_circular(
         )
 
     except Exception:
-
         return [
             " " * width
             for _ in range(height)
@@ -808,19 +800,15 @@ def _render_circular(
 # =============================================================
 
 def stop_visualizer():
-
     global _cava_backend
     global _cava_width
     global _circular_visualizer
 
     if _cava_backend is not None:
-
         _cava_backend.stop()
-
         _cava_backend = None
 
     _cava_width = None
-
     _circular_visualizer = None
 
     sys.stdout.write(
@@ -855,7 +843,6 @@ def _draw_frame(
         frame,
         start=1
     ):
-
         output.append(
             f"\033[{row};1H"
         )
@@ -938,7 +925,6 @@ def _fit_line(
     )
 
     if visible_length > width:
-
         result = []
 
         visible_length = 0
@@ -949,14 +935,12 @@ def _fit_line(
             + ")",
             text
         ):
-
             if not token:
                 continue
 
             if _ANSI_PATTERN.fullmatch(
                 token
             ):
-
                 result.append(
                     token
                 )
@@ -1010,7 +994,6 @@ def _center_vertical(
     lines = list(lines)
 
     if len(lines) >= height:
-
         return lines[
             -height:
         ]
@@ -1053,7 +1036,6 @@ def _draw_small_terminal(
     )
 
     if width > 0:
-
         message = _center_line(
             message,
             width
@@ -1068,7 +1050,6 @@ def _draw_small_terminal(
         1,
         total_rows + 1
     ):
-
         output += (
             f"\033[{row};1H"
             "\033[2K"
