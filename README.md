@@ -19,6 +19,11 @@ cuenta con:
 ### imagenes de caso
 ![Caso1_letra encontrada](assets/caso1.png)
 ![Caso2_letra no encontrada](assets/caso2.png)
+![Caso3_cavaNormal](assets/caspUsoCava.png)
+![Caso4_cavaCircular](assets/casoUsoCircular.png)
+![Caso2_tiposDeCava](assets/cava_distintos.png)
+
+
 
 ### video de uso
 ![Caso de uso](assets/noctune.gif)
