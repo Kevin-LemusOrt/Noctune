@@ -16,17 +16,42 @@ cuenta con:
 ---
 
 ## Vista previa
+
 ### imagenes de caso
+
+#### Sincronizacio de letra
 ![Caso1_letra encontrada](assets/caso1.png)
+
+#### Letra no encontrada
 ![Caso2_letra no encontrada](assets/caso2.png)
+
+#### Cava normal
 ![Caso3_cavaNormal](assets/caspUsoCava.png)
+
+#### Cava circular
 ![Caso4_cavaCircular](assets/casoUsoCircular.png)
+
+#### Tipos de cava integrados Circular y Normal al mismo tiempo
+
+Se muestran los dos tipos de visualizadore en tamaño de terminal disminuido junto al cava clasico
 ![Caso2_tiposDeCava](assets/cava_distintos.png)
 
 
 
 ### video de uso
+
+Noctune con cava normal
+
 ![Caso de uso](assets/noctune.gif)
+
+Noctune con cava circulas
+
+![Caso_uso_2](assets/CavaCircular.gif)
+
+Noctune en tamaño de terminal reducido
+
+![Caso_uso_2](assets/Cavas_Tamaño_compartido.gif)
+
 ---
 
 ## Características
@@ -45,18 +70,13 @@ Los controles multimedia todavía no están integrados en el funcionamiento actu
 
 La integración de `playerctl` y los controles mediante teclado se encuentra contemplada como una característica futura.
 
-### Controles a integral
+### Controles
 
 | Tecla   | Acción            |
 | ------- | ----------------- |
-| Alt + P | Play / Pause      |
-| Alt + N | Siguiente canción |
-| Alt + B | Canción anterior  |
-
-### Controles ya integrados
-
-| Tecla   | Acción            |
-| ------- | ----------------- |
+| P | Play / Pause      |
+| N | Siguiente canción |
+| B | Canción anterior  |
 | Ctrl + c | salir de noctune      |
 
 ---
