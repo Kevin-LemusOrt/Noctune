@@ -104,9 +104,7 @@ def _build_frame(
     )
 
     if height > 1:
-        frame[1] = (
-            "─" * width
-        )
+        frame[1] = "─" * width
 
     # ---------------------------------------------------------
     # LAYOUT
@@ -237,9 +235,7 @@ def _build_cava_layout(
     # ---------------------------------------------------------
 
     if separator_row < height:
-        frame[separator_row] = (
-            "─" * width
-        )
+        frame[separator_row] = "─" * width
 
     # ---------------------------------------------------------
     # CAVA
@@ -301,8 +297,6 @@ def _build_circular_layout(
 
     El circular ocupa la zona izquierda y
     las letras la zona derecha.
-
-    No existe línea divisora entre ambos.
     """
 
     content_start = 2
@@ -319,13 +313,6 @@ def _build_circular_layout(
     # DISTRIBUCIÓN HORIZONTAL
     # ---------------------------------------------------------
 
-    # El círculo ocupa aproximadamente el 45%
-    # de la terminal.
-    #
-    # En terminales grandes puede crecer hasta el 55%.
-    # En terminales pequeñas se le da más espacio
-    # para que el círculo conserve una presencia mayor.
-
     circular_width = max(
         24,
         int(width * 0.45)
@@ -339,6 +326,11 @@ def _build_circular_layout(
     # ---------------------------------------------------------
     # VENTANA PEQUEÑA
     # ---------------------------------------------------------
+    #
+    # En ventanas pequeñas damos más espacio al círculo.
+    # Esto permite que circular.py pueda aumentar tanto
+    # el centro como el recorrido de las barras.
+    #
 
     if width < 70:
         circular_width = max(
@@ -471,16 +463,10 @@ def _build_lyrics(
     Se muestran:
         - hasta 2 líneas anteriores
         - línea actual
-
-    No se muestran líneas futuras.
     """
 
     if height <= 0:
         return []
-
-    # ---------------------------------------------------------
-    # SIN LETRA
-    # ---------------------------------------------------------
 
     if not parsed_lyrics:
         dots = int(
@@ -502,10 +488,6 @@ def _build_lyrics(
             height
         )
 
-    # ---------------------------------------------------------
-    # VALIDAR ÍNDICE
-    # ---------------------------------------------------------
-
     current_index = max(
         0,
         min(
@@ -513,10 +495,6 @@ def _build_lyrics(
             len(parsed_lyrics) - 1
         )
     )
-
-    # ---------------------------------------------------------
-    # LÍNEAS VISIBLES
-    # ---------------------------------------------------------
 
     start_index = max(
         0,
@@ -533,10 +511,6 @@ def _build_lyrics(
     ]
 
     lines = []
-
-    # ---------------------------------------------------------
-    # PROCESAR LETRAS
-    # ---------------------------------------------------------
 
     for index, (
         _,
@@ -592,10 +566,6 @@ def _animate_current_lyric(
     current_index,
     lyric
 ):
-    """
-    Revela progresivamente la línea actual.
-    """
-
     timestamp = parsed_lyrics[
         current_index
     ][0]
@@ -666,10 +636,6 @@ def _animate_current_lyric(
 def _get_cava_backend(
     width
 ):
-    """
-    Obtiene la instancia global de Cava.
-    """
-
     global _cava_backend
     global _cava_width
 
@@ -698,13 +664,6 @@ def _render_cava(
     width,
     height
 ):
-    """
-    Obtiene el último frame disponible de Cava.
-
-    El color se aplica posteriormente en
-    _build_cava_layout().
-    """
-
     if width <= 0 or height <= 0:
         return []
 
@@ -757,11 +716,6 @@ def _render_circular(
     width,
     height
 ):
-    """
-    Obtiene los datos de Cava y los entrega
-    al visualizador circular.
-    """
-
     if width <= 0 or height <= 0:
         return []
 
@@ -827,13 +781,6 @@ def stop_visualizer():
 def _draw_frame(
     frame
 ):
-    """
-    Dibuja el frame utilizando ANSI.
-
-    No limpia toda la terminal en cada actualización,
-    evitando parpadeos.
-    """
-
     if not frame:
         return
 
@@ -870,10 +817,6 @@ def _center_line(
     text,
     width
 ):
-    """
-    Centra un texto horizontalmente.
-    """
-
     if width <= 0:
         return ""
 
@@ -905,13 +848,6 @@ def _fit_line(
     text,
     width
 ):
-    """
-    Garantiza que una línea tenga exactamente
-    el ancho solicitado.
-
-    Conserva las secuencias ANSI.
-    """
-
     if width <= 0:
         return ""
 
@@ -984,10 +920,6 @@ def _center_vertical(
     lines,
     height
 ):
-    """
-    Centra un bloque verticalmente.
-    """
-
     if height <= 0:
         return []
 
@@ -1025,12 +957,6 @@ def _draw_small_terminal(
     width,
     height
 ):
-    """
-    Mensaje para terminales demasiado pequeñas.
-    """
-
-    output = "\033[H"
-
     message = (
         "Terminal too small for Noctune."
     )
@@ -1045,6 +971,8 @@ def _draw_small_terminal(
         1,
         height
     )
+
+    output = "\033[H"
 
     for row in range(
         1,
